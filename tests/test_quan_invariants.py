@@ -18,7 +18,7 @@ CONTRACT = load_contract()
 TUNING = CONTRACT["tuning"]
 Q = TUNING["quan"]
 MENU = TUNING["menu"]
-INSTANCE_STOCK = CONTRACT.get("contract_version") == "1.2"
+INSTANCE_STOCK = CONTRACT.get("contract_version") in ("1.2", "1.3")
 BURN_ON = Q.get("burn_s") is not None
 SEEDS = (1, 7, 42, 2026)
 

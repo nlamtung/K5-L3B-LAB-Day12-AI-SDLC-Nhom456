@@ -1,13 +1,68 @@
 {
-  "seed": 7,
-  "days_requested": 10,
+  "days": 10,
   "days_completed": 10,
-  "total_ticks": 222000,
-  "duration_s": 1.6384,
-  "ticks_per_s": 135496.19,
   "crashes": 0,
-  "status": "PASS",
-  "final_score": 300,
-  "final_money": 0,
-  "final_reputation": 3.0
+  "results": [
+    {
+      "day": 1,
+      "earned": 0,
+      "reputation": 3.0,
+      "score": 300
+    },
+    {
+      "day": 2,
+      "earned": 0,
+      "reputation": 3.0,
+      "score": 300
+    },
+    {
+      "day": 3,
+      "earned": 0,
+      "reputation": 3.0,
+      "score": 300
+    },
+    {
+      "day": 4,
+      "earned": 0,
+      "reputation": 3.0,
+      "score": 300
+    },
+    {
+      "day": 5,
+      "earned": 0,
+      "reputation": 3.0,
+      "score": 300
+    },
+    {
+      "day": 6,
+      "earned": 0,
+      "reputation": 3.0,
+      "score": 300
+    },
+    {
+      "day": 7,
+      "earned": 0,
+      "reputation": 3.0,
+      "score": 300
+    },
+    {
+      "day": 8,
+      "earned": 0,
+      "reputation": 3.0,
+      "score": 300
+    },
+    {
+      "day": 9,
+      "earned": 0,
+      "reputation": 3.0,
+      "score": 300
+    },
+    {
+      "day": 10,
+      "earned": 0,
+      "reputation": 3.0,
+      "score": 300
+    }
+  ],
+  "duration_s": 3.3066
 }

@@ -67,7 +67,7 @@ def by_id(snap_items):
     return {x["id"]: x for x in snap_items}
 
 
-@unittest.skipUnless(CONTRACT.get("contract_version") == "1.2", "chờ contract v1.2")
+@unittest.skipUnless(CONTRACT.get("contract_version") in ("1.2", "1.3"), "chờ contract v1.2+")
 class GatherFreshness(unittest.TestCase):
     def test_spoiled_on_exact_boundary_tick(self):
         # 30.5 tươi, giỏ hao 0.5/s: tick 60 đúng 30.0 (chưa ươn), tick 61 < 30 -> spoiled đúng tick 61
@@ -108,7 +108,7 @@ class GatherFreshness(unittest.TestCase):
         self.assertEqual(s.snapshot()["hold"][0]["fresh"], 50, "pause dừng hao tươi")
 
 
-@unittest.skipUnless(CONTRACT.get("contract_version") == "1.2", "chờ contract v1.2")
+@unittest.skipUnless(CONTRACT.get("contract_version") in ("1.2", "1.3"), "chờ contract v1.2+")
 class QuanFreshness(unittest.TestCase):
     def test_reserved_items_decay_and_spoil_in_stock(self):
         c = waiting("C1", "T1", "ca_loc_nuong_trui", reserved=["I1"])
@@ -165,7 +165,7 @@ class QuanFreshness(unittest.TestCase):
         self.assertEqual(cook["base_price"], (MENU["ca_loc_nuong_trui"]["price"] * f / 100).__floor__())
 
 
-@unittest.skipUnless(CONTRACT.get("contract_version") == "1.2", "chờ contract v1.2")
+@unittest.skipUnless(CONTRACT.get("contract_version") in ("1.2", "1.3"), "chờ contract v1.2+")
 class FilePrecisionAndDay(unittest.TestCase):
     def test_file_roundtrip_keeps_threshold_branch(self):
         # 30 + 1/120: sau 1 bước gather đúng 30.0 (chưa ươn) -> file -> quán đọc lại vẫn 30 -> bước quán đầu mới ươn
@@ -208,7 +208,7 @@ class FilePrecisionAndDay(unittest.TestCase):
         self.assertEqual([x["fresh"] for x in s.snapshot()["hold"]], [90, 90])
 
 
-@unittest.skipUnless(CONTRACT.get("contract_version") == "1.2", "chờ contract v1.2")
+@unittest.skipUnless(CONTRACT.get("contract_version") in ("1.2", "1.3"), "chờ contract v1.2+")
 class BadFixturesV12(unittest.TestCase):
     def test_bad_v12_fixtures_exit_2(self):
         c = {"id": "C1", "table_id": "T1", "dish_id": "ca_loc_nuong_trui"}

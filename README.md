@@ -13,11 +13,13 @@ PYTHONPATH=tests:. python3 -m unittest discover -s tests -v    # Chạy toàn b�
 python3 -m chonoi.live --mode gather                           # Chơi trực tiếp trên trình duyệt (đổi sang --mode quan cho buổi tối)
 ```
 
-### Chạy nối 2 buổi (Headless / Live) qua file kho (Contract v1.2 — kho cá thể)
+### Chạy nối 2 buổi (Headless / Live) & Benchmark / Soak (Contract v1.3)
 ```bash
 python3 -m chonoi.headless --mode gather --seed 42 --scenario docs/proof/phase-3/dock.json --inputs docs/proof/phase-3/dock-inputs.json --ticks 1 --out gather.jsonl --inventory-out catch.json
 python3 -m chonoi.headless --mode quan --seed 42 --inventory catch.json --ticks 0 --out quan.jsonl
 python3 -m chonoi.headless --mode day --seed 7 --days 2 --ticks 44400 --out day.jsonl      # vòng ngày gather → quan → shop
+python3 -m chonoi.bench --seed 42 --duration 30 --out bench.json                            # benchmark hiệu năng (5 trường JSON)
+python3 -m chonoi.soak --seed 7 --days 10 --out soak.json                                   # soak test 10 ngày lặp D1–D5
 ```
 File kho v1.2 là mảng cá thể `{"items":[{"id":"I1","kind":"ca_linh","fresh":99.99166666666666}]}` (schema: [`docs/contracts/README.md`](docs/contracts/README.md));
 file kho đếm cũ `{"items":{"ca_loc":1}}` bị từ chối với mã 2. Xem [`CHANGELOG.md`](CHANGELOG.md) để cập nhật fixture.
@@ -57,4 +59,4 @@ file kho đếm cũ `{"items":{"ca_loc":1}}` bị từ chối với mã 2. Xem [
 
 - Kiểm tra danh sách thành viên: `python3 tools/check_team.py`
 - Kỹ năng kiểm tra tự động của nhóm: `python3 .agents/skills/verify-contract/verify.py` · `python3 .agents/skills/qa-blackbox-check/run_qa.py`
-- Tài liệu: [`docs/verification/phase-1.md`](docs/verification/phase-1.md) · [`phase-2.md`](docs/verification/phase-2.md) · [`phase-3.md`](docs/verification/phase-3.md) · [`ADR-0001`](docs/adr/0001-freshness-v12.md) · [`CHANGELOG.md`](CHANGELOG.md) · [`docs/clarify.md`](docs/clarify.md) · [`docs/ai-usage-log.md`](docs/ai-usage-log.md) · [`docs/standup.md`](docs/standup.md) · [`docs/retro.md`](docs/retro.md) · [`CREDITS.md`](CREDITS.md)
+- Tài liệu: [`docs/verification/phase-1.md`](docs/verification/phase-1.md) · [`phase-2.md`](docs/verification/phase-2.md) · [`phase-3.md`](docs/verification/phase-3.md) · [`phase-4.md`](docs/verification/phase-4.md) · [`ADR-0001`](docs/adr/0001-freshness-v12.md) · [`CHANGELOG.md`](CHANGELOG.md) · [`docs/clarify.md`](docs/clarify.md) · [`docs/ai-usage-log.md`](docs/ai-usage-log.md) · [`docs/standup.md`](docs/standup.md) · [`docs/retro.md`](docs/retro.md) · [`CREDITS.md`](CREDITS.md)

@@ -26,7 +26,7 @@ from chonoi.runner import Session
 from helpers import ROOT, Workdir, events, frames, headless_cmd, read_jsonl, snapshots, write_json
 
 CONTRACT = load_contract()
-V12 = CONTRACT.get("contract_version") == "1.2"
+V12 = CONTRACT.get("contract_version") in ("1.2", "1.3")
 TUNING = CONTRACT["tuning"]
 Q = TUNING["quan"]
 MENU = TUNING["menu"]
