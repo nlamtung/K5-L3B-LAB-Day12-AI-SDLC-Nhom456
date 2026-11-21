@@ -181,12 +181,22 @@ const down = new Set();
 const MOVE_KEYS = { w: "u", arrowup: "u", s: "d", arrowdown: "d", a: "l", arrowleft: "l", d: "r", arrowright: "r" };
 let queue = [], inflight = false, lastSent = "";
 
-function currentInput() {
-  const mode = snap ? snap.mode : "gather";
+function currentInput(extra = {}) {
+  const phase = snap ? (snap.phase || snap.mode) : "gather";
   const dx = (down.has("r") ? 1 : 0) - (down.has("l") ? 1 : 0);
   let dy = (down.has("d") ? 1 : 0) - (down.has("u") ? 1 : 0);   // gather: xuống = d dương
-  if (mode === "quan") dy = -dy;                                // quan: lên (bắc) = z dương
-  return { move: [dx, dy], interact: down.has("interact"), catch: down.has("catch") };
+  if (phase === "quan") dy = -dy;                               // quan: lên (bắc) = z dương
+  return Object.assign({
+    move: [dx, dy],
+    interact: down.has("interact"),
+    catch: down.has("catch"),
+    pause: down.has("pause"),
+    shop_done: down.has("shop_done")
+  }, extra);
+}
+function sendOneShot(extra) {
+  queue.push(JSON.stringify(currentInput(extra)));
+  flush();
 }
 function pushInput() {
   const s = JSON.stringify(currentInput());
@@ -209,9 +219,17 @@ function keyName(e) { return e.key.length === 1 ? e.key.toLowerCase() : e.key.to
 addEventListener("keydown", (e) => {
   initAudio();
   const k = keyName(e);
+  const phase = snap ? (snap.phase || snap.mode) : "gather";
   if (e.repeat) { if (k === " " || k.startsWith("arrow")) e.preventDefault(); return; }
   if (MOVE_KEYS[k]) { down.add(MOVE_KEYS[k]); e.preventDefault(); }
-  else if (k === "e") down.add("interact");
+  else if (k === "e") {
+    if (phase === "shop") down.add("shop_done");
+    else down.add("interact");
+  }
+  else if (k === "enter" && phase === "shop") { down.add("shop_done"); }
+  else if (k === "1" && phase === "shop") { sendOneShot({ buy: "oxygen" }); return; }
+  else if (k === "2" && phase === "shop") { sendOneShot({ buy: "hp" }); return; }
+  else if (k === "p" || k === "escape") { down.add("pause"); }
   else if (k === " ") { down.add("catch"); e.preventDefault(); }
   else if (k === "h") { toggleHighContrast(); }
   else if (k === "r") { fetch("/restart", { method: "POST" }); lastSent = ""; down.clear(); }
@@ -220,7 +238,9 @@ addEventListener("keydown", (e) => {
 addEventListener("keyup", (e) => {
   const k = keyName(e);
   if (MOVE_KEYS[k]) down.delete(MOVE_KEYS[k]);
-  else if (k === "e") down.delete("interact");
+  else if (k === "e") { down.delete("interact"); down.delete("shop_done"); }
+  else if (k === "enter") down.delete("shop_done");
+  else if (k === "p" || k === "escape") down.delete("pause");
   else if (k === " ") down.delete("catch");
   pushInput();
 });
@@ -628,14 +648,53 @@ function drawQuan(w, h) {
   text("WASD / Mũi tên: Di chuyển · E: Tương tác (Nấu/Bưng/Phục vụ) · R: Chơi lại", w - 16, h - 14, { size: 12, align: "right", color: "#b0bec5" });
 }
 
+function drawShop(w, h) {
+  ctx.fillStyle = "#16202a";
+  ctx.fillRect(0, 0, w, h);
+  const ups = (snap.shop_meta && snap.shop_meta.upgrades) || {};
+  const cur = snap.upgrades || {};
+  const cx = w / 2, top = 80;
+  text(`🛒 CHỢ NÂNG CẤP — NGÀY ${snap.day || 1}`, cx, top, { align: "center", size: 26, weight: "bold", color: "#ffd54f" });
+  text(`⏱ Tự đóng sau: ${fmtTime(snap.time_left_ticks || 0)}  ·  💰 Tiền: ${snap.money ?? 0}k  ·  ⭐ Uy tín: ${(snap.reputation ?? 0).toFixed(1)}  ·  🏆 Điểm: ${snap.score ?? 0}`, cx, top + 36, { align: "center", size: 16, color: "#e8eef2" });
+
+  const cards = [
+    { key: "1", id: "oxygen", title: "🫧 Bình Oxy", desc: "Tăng oxy tối đa từ Ngày kế" },
+    { key: "2", id: "hp", title: "🛟 Áo Phao (Máu)", desc: "Tăng Máu tối đa từ Ngày kế" }
+  ];
+  cards.forEach((c, idx) => {
+    const lv = cur[c.id] || 0;
+    const list = ups[c.id] || [];
+    const nxt = list.find((e) => e.level === lv + 1);
+    const bx = cx - 260 + idx * 270, by = top + 75, bw = 250, bh = 150;
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, 12) : ctx.rect(bx, by, bw, bh); ctx.fill();
+    ctx.strokeStyle = nxt && (snap.money >= nxt.price) ? "#66bb6a" : "rgba(255,255,255,0.25)";
+    ctx.lineWidth = 2; ctx.stroke();
+    text(`[${c.key}] ${c.title}`, bx + 16, by + 34, { size: 18, weight: "bold", color: "#fff" });
+    text(`Cấp hiện tại: ${lv}/${list.length}`, bx + 16, by + 64, { size: 14, color: "#b0bec5" });
+    text(c.desc, bx + 16, by + 90, { size: 12, color: "#90a4ae" });
+    text(nxt ? `Giá cấp ${nxt.level}: ${nxt.price}k (nhấn ${c.key})` : "✅ Đã tối đa", bx + 16, by + 125, { size: 14, weight: "bold", color: nxt ? "#ffe082" : "#66bb6a" });
+  });
+
+  text("Nhấn [Enter] hoặc [E] để đóng Shop sang Ngày mới · [P/Esc] Tạm dừng · [R] Chơi lại", cx, top + 275, { align: "center", size: 15, color: "#81d4fa", weight: "bold" });
+}
+
 function frame() {
   requestAnimationFrame(frame);
   const [w, h] = fit();
   ctx.fillStyle = "#0c1218"; ctx.fillRect(0, 0, w, h);
   if (snap) {
-    if (snap.mode === "quan") drawQuan(w, h); else drawGather(w, h);
+    const phase = snap.phase || snap.mode;
+    if (phase === "quan") drawQuan(w, h);
+    else if (phase === "shop") drawShop(w, h);
+    else drawGather(w, h);
     updateAndDrawParticles();
     eventLog(w, h);
+    if (snap.state === "paused") {
+      ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, 0, w, h);
+      text("⏸ TẠM DỪNG", w / 2, h / 2 - 12, { align: "center", size: 28, weight: "bold", color: "#ffd54f" });
+      text("Nhấn P hoặc Esc để tiếp tục", w / 2, h / 2 + 24, { align: "center", size: 16, color: "#e8eef2" });
+    }
     overlay(w, h);
   } else {
     text(offline ? "Không kết nối được máy chủ…" : "Đang kết nối phiên chơi…", w / 2, h / 2, { align: "center", size: 18 });

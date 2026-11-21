@@ -10,7 +10,7 @@ Không cần cài đặt thư viện ngoài (chỉ dùng Python 3 thư viện ch
 ```bash
 git clone https://github.com/nlamtung/K5-L3B-LAB-Day12-AI-SDLC-Nhom456.git && cd K5-L3B-LAB-Day12-AI-SDLC-Nhom456
 PYTHONPATH=tests:. python3 -m unittest discover -s tests -v    # Chạy toàn bộ bộ test (1 lệnh)
-python3 -m chonoi.live --mode gather                           # Chơi trực tiếp trên trình duyệt (đổi sang --mode quan cho buổi tối)
+python3 -m chonoi.live --mode day --days 1                     # Chơi trọn vòng ngày gather → quan → shop (hoặc --mode gather / --mode quan)
 ```
 
 ### Chạy nối 2 buổi (Headless / Live) & Benchmark / Soak (Contract v1.3)
