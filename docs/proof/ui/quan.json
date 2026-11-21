@@ -1,0 +1,6 @@
+{"quan":{"player":{"pos":[3.5,6.6]},"random_customers":false,
+ "stock":[{"id":"I1","kind":"ca_loc","fresh":95},{"id":"I2","kind":"bong_sung","fresh":80},{"id":"I3","kind":"bong_sung","fresh":25},{"id":"I4","kind":"ca_keo","fresh":70},{"id":"I5","kind":"ca_keo","fresh":66},{"id":"I6","kind":"bong_dien_dien","fresh":90}],
+ "customers":[{"id":"C1","table_id":"T1","dish_id":"ca_loc_nuong_trui","order_status":"assigned","reserved":[]},
+  {"id":"C2","table_id":"T2","dish_id":"ca_keo_nuong","reserved":["I4","I5"],"patience_ticks_left":700},
+  {"id":"C3","table_id":"T3","dish_id":"goi_bong_sung","state":"eating","order_status":"served","reserved":[],"eat_ticks_left":300,"base_price":40,"tip":8}],
+ "stoves":[{"id":"B1","state":"cooking","dish":{"order_id":"C1","dish_id":"ca_loc_nuong_trui","base_price":57},"cook_ticks_left":160}]}}
