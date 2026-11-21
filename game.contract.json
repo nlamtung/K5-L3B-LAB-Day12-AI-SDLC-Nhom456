@@ -50,8 +50,11 @@
       "walk_speed": 4.0,
       "ramp_max_ticks": 6,
       "interact_radius": 1.5,
-      "stoves": [{"id": "B1", "pos": [2, 8]}],
-      "tables": [{"id": "T1", "pos": [9, 2]}],
+      "stoves": [{"id": "B1", "pos": [2, 8]}, {"id": "B2", "pos": [5, 8]}],
+      "tables": [
+        {"id": "T1", "pos": [9, 2]}, {"id": "T2", "pos": [13, 2]},
+        {"id": "T3", "pos": [9, 6]}, {"id": "T4", "pos": [13, 6]}
+      ],
       "first_customer_tick": 120,
       "customer_interval_s": 15,
       "patience_s": 60,
@@ -69,8 +72,23 @@
     "menu": {
       "ca_loc_nuong_trui": {"recipe": {"ca_loc": 1}, "cook_s": 6, "price": 60},
       "goi_bong_sung": {"recipe": {"bong_sung": 2}, "cook_s": 4, "price": 40},
-      "lau_ca_linh_dien_dien": {"recipe": {"ca_linh": 3, "bong_dien_dien": 1}, "cook_s": 10, "price": 120}
+      "lau_ca_linh_dien_dien": {"recipe": {"ca_linh": 3, "bong_dien_dien": 1}, "cook_s": 10, "price": 120},
+      "canh_chua_ca_loc": {"recipe": {"ca_loc": 1, "bong_dien_dien": 1}, "cook_s": 8, "price": 90},
+      "ca_keo_nuong": {"recipe": {"ca_keo": 2}, "cook_s": 6, "price": 70},
+      "lau_mam": {"recipe": {"ca_linh": 2, "ca_keo": 1, "keo_neo": 1, "bong_dien_dien": 1}, "cook_s": 12, "price": 200}
     },
+    "day_plan": [
+      {"day": 1, "dishes": {"ca_loc_nuong_trui": 3, "goi_bong_sung": 3},
+       "ingredients": {"bong_sung": 6, "ca_loc": 3}},
+      {"day": 2, "dishes": {"ca_loc_nuong_trui": 2, "lau_ca_linh_dien_dien": 2},
+       "ingredients": {"bong_dien_dien": 2, "ca_linh": 6, "ca_loc": 2}},
+      {"day": 3, "dishes": {"goi_bong_sung": 2, "canh_chua_ca_loc": 2, "ca_keo_nuong": 2},
+       "ingredients": {"bong_dien_dien": 2, "bong_sung": 4, "ca_keo": 4, "ca_loc": 2}},
+      {"day": 4, "dishes": {"lau_mam": 1, "ca_loc_nuong_trui": 2, "goi_bong_sung": 1},
+       "ingredients": {"bong_dien_dien": 1, "bong_sung": 2, "ca_keo": 1, "ca_linh": 2, "ca_loc": 2, "keo_neo": 1}},
+      {"day": 5, "dishes": {"lau_mam": 1, "lau_ca_linh_dien_dien": 1, "ca_loc_nuong_trui": 1},
+       "ingredients": {"bong_dien_dien": 2, "ca_keo": 1, "ca_linh": 5, "ca_loc": 1, "keo_neo": 1}}
+    ],
     "score": {"reputation_multiplier": 100}
   }
 }

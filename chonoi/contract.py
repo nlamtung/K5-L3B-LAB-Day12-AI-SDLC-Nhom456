@@ -4,15 +4,21 @@ import json
 import os
 
 from .errors import BadInput
-from .inventory import KINDS_P1
+from .day_plan import validate_day_plan
+from .inventory import KINDS
 
-# PRD-0 mục A: cố định id + công thức 3 món, 1 bếp B1, 1 bàn T1.
+# TICKET-02 mục 1.3 (v1.1): cố định id + công thức 6 món, 2 bếp B1–B2, 4 bàn T1–T4.
+# (Phase 1 là 3 món, 1 bếp B1, 1 bàn T1 — đổi theo số chuẩn của TICKET-02.)
 FIXED_RECIPES = {
     "ca_loc_nuong_trui": {"ca_loc": 1},
     "goi_bong_sung": {"bong_sung": 2},
     "lau_ca_linh_dien_dien": {"ca_linh": 3, "bong_dien_dien": 1},
+    "canh_chua_ca_loc": {"ca_loc": 1, "bong_dien_dien": 1},
+    "ca_keo_nuong": {"ca_keo": 2},
+    "lau_mam": {"ca_linh": 2, "ca_keo": 1, "keo_neo": 1, "bong_dien_dien": 1},
 }
-FIXED_LAYOUT = {"stoves": ("B1",), "tables": ("T1",)}
+FIXED_LAYOUT = {"stoves": ("B1", "B2"), "tables": ("T1", "T2", "T3", "T4")}
+DAYS = 5
 
 DEFAULT_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "game.contract.json")
 
@@ -147,7 +153,7 @@ def validate_tuning(t):
         raise BadInput("burn_s phải là null ở Phase 1")
     _validate_quan_layout(q)
     if {k: (d.get("recipe") if isinstance(d, dict) else None) for k, d in menu.items()} != FIXED_RECIPES:
-        raise BadInput(f"tuning.menu phải có đúng 3 món và công thức cố định (PRD-0 mục A, 5): {FIXED_RECIPES}")
+        raise BadInput(f"tuning.menu phải có đúng 6 món và công thức cố định (TICKET-02 mục 1.3): {FIXED_RECIPES}")
     for dish_id, d in menu.items():
         price, cook = d.get("price"), d.get("cook_s")
         if (isinstance(price, bool) or not isinstance(price, int) or price <= 0 or not _num(cook)
@@ -157,9 +163,10 @@ def validate_tuning(t):
         if not isinstance(recipe, dict) or not recipe:
             raise BadInput(f"menu.{dish_id}: recipe phải là object không rỗng")
         for k, n in recipe.items():
-            if k not in KINDS_P1:
+            if k not in KINDS:
                 raise BadInput(f"menu.{dish_id}: nguyên liệu lạ {k}")
             _int_between(f"menu.{dish_id}.recipe.{k}", n, 1, 10_000)
+    validate_day_plan(t.get("day_plan"), menu, DAYS)
     score = t.get("score")
     if not isinstance(score, dict) or not _num(score.get("reputation_multiplier")) or score["reputation_multiplier"] < 0:
         raise BadInput("tuning.score.reputation_multiplier phải là số >= 0")
@@ -184,4 +191,4 @@ def _validate_quan_layout(q):
             seen.add(e["id"])
             _pos_in(f"quan.{name}.{e['id']}.pos", e.get("pos"), qb, ("x", "z"))
         if sorted(seen) != list(FIXED_LAYOUT[name]):
-            raise BadInput(f"tuning.quan.{name} phải đúng {list(FIXED_LAYOUT[name])} (PRD-0 mục A)")
+            raise BadInput(f"tuning.quan.{name} phải đúng {list(FIXED_LAYOUT[name])} (TICKET-02 mục 1.3)")

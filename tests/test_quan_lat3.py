@@ -303,6 +303,7 @@ class Units(unittest.TestCase):
 
     def test_het_ban_thi_bo_luot(self):
         t = copy.deepcopy(T)
+        t["quan"]["tables"] = t["quan"]["tables"][:1]  # TICKET-02 có 4 bàn: dựng quán 1 bàn để lượt sau hết chỗ
         t["quan"]["customer_interval_s"] = 1
         sim = self._sim(t, {"stock": plenty_stock()})
         ev = self._run(sim, t["quan"]["first_customer_tick"] + 3 * TICK)
@@ -327,7 +328,7 @@ class Units(unittest.TestCase):
         self.assertEqual(ev[0][2]["reputation"], Q["reputation_min"])
 
     def test_chon_deu_trong_mon_du_nguyen_lieu(self):
-        chosen = {self._sim(T, {"stock": plenty_stock()}, seed)._choose_dish() for seed in range(1, 40)}
+        chosen = {self._sim(T, {"stock": plenty_stock()}, seed)._choose_dish() for seed in range(1, 120)}
         self.assertEqual(chosen, set(MENU), "nhiều seed thì món đủ nguyên liệu nào cũng có lúc được chọn")
         self.assertEqual({self._sim(T, {"stock": DISH_STOCK}, s)._choose_dish() for s in range(1, 10)}, {DISH})
 
@@ -335,10 +336,12 @@ class Units(unittest.TestCase):
         from chonoi.contract import validate_tuning
         from chonoi.errors import BadInput
         validate_tuning(copy.deepcopy(T))
+        # TICKET-02: bố cục chuẩn đổi sang 2 bếp B1–B2, 4 bàn T1–T4, 6 món — sửa đột biến cho khớp (thêm T5, đổi B2 -> B3).
         for mutate in (lambda t: t["menu"].pop(DISH),
                        lambda t: t["menu"][DISH]["recipe"].update({"ca_loc": 2, "bong_sung": 1}),
-                       lambda t: t["quan"]["tables"].append({"id": "T2", "pos": [1, 1]}),
-                       lambda t: t["quan"]["stoves"].__setitem__(0, {"id": "B2", "pos": [2, 8]}),
+                       lambda t: t["quan"]["tables"].append({"id": "T5", "pos": [1, 1]}),
+                       lambda t: t["quan"]["tables"].pop(),
+                       lambda t: t["quan"]["stoves"].__setitem__(1, {"id": "B3", "pos": [5, 8]}),
                        lambda t: t["quan"]["tables"][0].__setitem__("pos", [99, 1]),
                        lambda t: t["quan"].__setitem__("reputation_initial", 9),
                        lambda t: t["quan"].__setitem__("carry_limit", 0)):
