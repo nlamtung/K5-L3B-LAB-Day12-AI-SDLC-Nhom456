@@ -109,6 +109,7 @@ class LiveGame:
             snap["meta"] = self.tuning.get(phase, {})
             snap["shop_meta"] = self.tuning.get("shop")
             snap["freshness"] = self.tuning.get("freshness")  # v1.2: HUD đọc ngưỡng ươn
+            snap["menu"] = self.tuning.get("menu")  # HUD: thời gian nấu, công thức (không hard-code số ở client)
             snap["events"] = list(self.events)
             snap["finished"] = self.session.done
             reason = getattr(self.session, "reason", None)
