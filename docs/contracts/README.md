@@ -4,7 +4,19 @@
 
 ## 1. Schema file kho (`gather` → `quan`, mục G)
 
-- Đường dẫn mẫu hợp lệ: [`inventory.sample.json`](inventory.sample.json) → `{"items":{"bong_sung":2,"ca_loc":1}}`.
+### v1.2 — đang chạy (Phase 3, TICKET-03; quyết định ở [ADR-0001](../adr/0001-freshness-v12.md))
+
+- Mẫu hợp lệ: [`inventory.sample.json`](inventory.sample.json) →
+  `{"items":[{"id":"I1","kind":"ca_linh","fresh":100},{"id":"I2","kind":"ca_loc","fresh":97.5}]}`.
+- Đúng một khóa gốc `"items"`: **mảng cá thể** `{id, kind, fresh}` — `id` chuỗi duy nhất khác rỗng, `kind` thuộc 6 nguyên liệu,
+  `fresh` hữu hạn trong `[0, 100]`. Kho rỗng `{"items":[]}`. Bên ghi xuất theo id, `fresh` đủ chính xác để đọc lại giữ nhánh ở ngưỡng 30.
+- Bên đọc chọn schema theo `contract_version`; v1.2 trả mã `2` cho kho đếm cũ, sai schema, kind lạ, id trùng, `fresh` ngoài miền.
+- Ghi đúng một lần khi có `gather_end` (ngất ghi rỗng), file tạm + thay thế nguyên tử; chạm `--ticks` trước thì không tạo/ghi đè.
+- `customers[].reserved` là mảng id cá thể; `cook_started.items`, `monster_hit.lost`, `faint.lost` là mảng cá thể.
+
+### v1.0 / v1.1 — lịch sử (Phase 1–2)
+
+- Đường dẫn mẫu cũ: `{"items":{"bong_sung":2,"ca_loc":1}}`.
 - Chỉ có đúng một khóa gốc `"items"`: object ánh xạ `kind -> số nguyên không âm`.
 - 4 nguyên liệu Phase 1: `ca_loc`, `ca_linh`, `bong_dien_dien`, `bong_sung`.
 - Nguyên liệu vắng coi là `0`; bên ghi bỏ mọi khóa có lượng `0` (kho rỗng là `{"items":{}}`).
@@ -32,10 +44,11 @@
 | `gather` | `gather` | `{"node_id", "kind", "amount"}` | `sim/gather` → JSONL, UI |
 | `gather` | `fish_caught` | `{"fish_id", "kind", "yield"}` | `sim/gather` → JSONL, UI |
 | `gather` | `hold_full` | `{"action": "gather"\|"catch", "node_id"\|"fish_id", "required", "free"}` | `sim/gather` → JSONL, UI |
-| `gather` | `gather_end` | `{"reason": "time"\|"docked"\|"fainted", "inventory": {"items": {...}}}` | `sim/gather` → JSONL, runner (ghi kho), UI |
+| `gather` | `gather_end` | `{"reason": "time"\|"docked"\|"fainted", "inventory": {"items": [...]}}` (v1.2: mảng cá thể theo id) | `sim/gather` → JSONL, runner (ghi kho), UI |
+| `gather`, `quan` | `spoiled` | `{"item_id", "kind", "location": "hold"\|"stock"}` (v1.2, một lần khi xuống < 30, theo id) | `sim/gather`, `sim/quan` → JSONL, UI |
 | `quan` | `customer_arrived` | `{"order_id", "table_id", "dish_id"}` | `sim/quan` → JSONL, UI |
 | `quan` | `no_dish` | `{}` (có bàn trống nhưng không đủ nguyên liệu cho món nào) | `sim/quan` → JSONL, UI |
-| `quan` | `cook_started` | `{"stove_id", "order_id", "dish_id", "items": [...], "base_price"}` (`items` sắp theo `kind`) | `sim/quan` → JSONL, UI |
+| `quan` | `cook_started` | `{"stove_id", "order_id", "dish_id", "items": [...], "base_price"}` (v1.2: `items` là cá thể sắp theo kind rồi id; `base_price` chốt theo độ tươi) | `sim/quan` → JSONL, UI |
 | `quan` | `dish_ready` | `{"stove_id", "order_id", "dish_id"}` | `sim/quan` → JSONL, UI |
 | `quan` | `dish_picked` | `{"stove_id", "order_id", "dish_id"}` | `sim/quan` → JSONL, UI |
 | `quan` | `served` | `{"order_id", "table_id", "dish_id", "patience_ticks_left", "base_price", "tip"}` | `sim/quan` → JSONL, UI |

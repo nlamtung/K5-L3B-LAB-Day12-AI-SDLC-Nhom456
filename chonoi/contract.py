@@ -4,7 +4,7 @@ import json
 import os
 
 from .errors import BadInput
-from .inventory import KINDS_P1, KINDS_P2
+from .inventory import KINDS_P1, KINDS_P2, is_v12
 
 FIXED_RECIPES_V10 = {
     "ca_loc_nuong_trui": {"ca_loc": 1},
@@ -145,6 +145,19 @@ def _validate_gather(g, version="1.1"):
             raise BadInput("tuning.gather.monsters phải có species.ca_sau")
 
 
+FRESHNESS_KEYS = {"initial", "gather_decay_per_s", "quan_decay_per_s", "spoiled_below"}
+
+
+def _validate_freshness(f):
+    """v1.2 (TICKET-03): freshness {initial, gather_decay_per_s, quan_decay_per_s, spoiled_below}."""
+    if not isinstance(f, dict) or set(f) != FRESHNESS_KEYS:
+        raise BadInput(f"tuning.freshness phải có đúng các khóa {sorted(FRESHNESS_KEYS)} (contract v1.2)")
+    _between("freshness.initial", f["initial"], 0, 100)
+    _between("freshness.spoiled_below", f["spoiled_below"], 0, 100)
+    for k in ("gather_decay_per_s", "quan_decay_per_s"):
+        _between(f"freshness.{k}", f[k], 0, 100)
+
+
 def validate_tuning(t, version="1.1"):
     if not isinstance(t, dict):
         raise BadInput("thiếu khối tuning")
@@ -203,6 +216,9 @@ def validate_tuning(t, version="1.1"):
         if not isinstance(shop, dict) or "upgrades" not in shop:
             raise BadInput("tuning.shop phải có max_ticks và upgrades")
         _int_between("shop.max_ticks", shop.get("max_ticks"), 1, 100_000)
+
+    if is_v12(version):
+        _validate_freshness(t.get("freshness"))
 
     score = t.get("score")
     if not isinstance(score, dict) or not _num(score.get("reputation_multiplier")) or score["reputation_multiplier"] < 0:

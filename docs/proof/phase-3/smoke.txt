@@ -1,0 +1,31 @@
+$ python3 -m chonoi.headless --mode gather --seed 1 --scenario docs/proof/phase-3/threshold.json --ticks 1 --out docs/proof/phase-3/threshold.jsonl
+exit 0
+{"type":"event","tick":1,"phase":"gather","name":"spoiled","data":{"item_id":"I1","kind":"ca_linh","location":"hold"}}
+
+$ python3 -m chonoi.headless --mode gather --seed 42 --scenario docs/proof/phase-3/dock.json --inputs docs/proof/phase-3/dock-inputs.json --ticks 1 --out docs/proof/phase-3/gather.jsonl --inventory-out docs/proof/phase-3/catch.json
+exit 0
+$ cat docs/proof/phase-3/catch.json
+{"items":[{"id":"I1","kind":"ca_linh","fresh":99.99166666666666}]}
+{"type":"event","tick":1,"phase":"gather","name":"gather_end","data":{"reason":"docked","inventory":{"items":[{"id":"I1","kind":"ca_linh","fresh":99.992}]}}}
+$ python3 -m chonoi.headless --mode quan --seed 42 --inventory docs/proof/phase-3/catch.json --ticks 0 --out docs/proof/phase-3/quan.jsonl
+exit 0
+snapshot quán tick 0 stock = [{"id": "I1", "kind": "ca_linh", "fresh": 99.992}]
+
+$ python3 -m chonoi.headless --mode quan --seed 1 --inventory docs/proof/phase-3/counted-v11.json --ticks 0 --out /tmp/x.jsonl   # kho đếm v1.1
+đầu vào sai: items phải là mảng cá thể {id, kind, fresh} (v1.2)
+exit 2
+(không ghi output)
+
+$ python3 -m chonoi.headless --mode day --seed 7 --scenario docs/proof/phase-3/day.json --inputs docs/proof/phase-3/dock-inputs.json --days 2 --ticks 44400 --out docs/proof/phase-3/day2.jsonl
+real 0.48
+user 0.47
+sys 0.00
+exit 0
+0 1 gather day_start 
+0 1 gather phase_start 
+1 1 gather gather_end {"reason": "docked", "inventory": {"items": [{"id": "I1", "kind": "ca_loc", "fresh": 99.992}, {"id": "I2", "kind": "bong_sung", "fresh": 99.992}, {"id": "I3", "kind": "bong_sung", "fresh": 99.992}]}}
+1 1 quan phase_start 
+tick 10 (quán Ngày 1) stock ids: ['I1', 'I2', 'I3'] fresh: [99.954, 99.954, 99.954]
+Ngày 2 gather hold ids: ['I4', 'I5', 'I6'] fresh: [99.925, 99.925, 99.925]
+end: {"type": "end", "ticks": 33601, "sim_tick": 33601, "mode": "day", "state": "finished", "reason": "days_complete", "money": 0, "earned": 0, "reputation": 1.0, "score": 100, "days_completed": 2}
+chạy lại cùng seed: day2.jsonl giống từng byte

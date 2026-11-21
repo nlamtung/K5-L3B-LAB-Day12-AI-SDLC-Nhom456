@@ -65,3 +65,29 @@ class Workdir:
 
     def path(self, name):
         return os.path.join(self._d.name, name)
+
+
+# --- v1.2 (TICKET-03): kho / giỏ là mảng cá thể {id, kind, fresh} ----------------------------
+def items(*kinds, fresh=100, start=1, prefix="I"):
+    """Mảng cá thể theo thứ tự kinds, id I{start}, I{start+1}…"""
+    return [{"id": f"{prefix}{start + i}", "kind": k, "fresh": fresh} for i, k in enumerate(kinds)]
+
+
+def stock_of(counted, fresh=100, start=1, prefix="I"):
+    """Kho đếm {kind: n} -> mảng cá thể (kind theo thứ tự chữ cái, id nối tiếp từ start)."""
+    kinds = [k for k in sorted(counted) for _ in range(counted[k])]
+    return items(*kinds, fresh=fresh, start=start, prefix=prefix)
+
+
+def counts(item_list):
+    """Mảng cá thể (hoặc mảng kind) -> {kind: n} sắp theo kind, để so lượng."""
+    out = {}
+    for it in item_list:
+        k = it["kind"] if isinstance(it, dict) else it
+        out[k] = out.get(k, 0) + 1
+    return {k: out[k] for k in sorted(out)}
+
+
+def kinds(item_list):
+    """Mảng cá thể -> mảng kind (giữ thứ tự)."""
+    return [it["kind"] for it in item_list]

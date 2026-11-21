@@ -14,6 +14,8 @@ from chonoi.contract import load_contract
 from chonoi.inputs import InputState
 from chonoi.runner import Session
 
+from helpers import stock_of
+
 TUNING = load_contract()["tuning"]
 Q = TUNING["quan"]
 MENU = TUNING["menu"]
@@ -21,6 +23,10 @@ BURN_ON = Q.get("burn_s") is not None
 STOVE = {s["id"]: s["pos"] for s in Q["stoves"]}["B1"]
 DISH = "ca_loc_nuong_trui"
 RECIPE = MENU[DISH]["recipe"]
+# TICKET-03 (v1.2) [THAY THẾ]: kho là mảng cá thể, reserved là mảng id. RECIPE_STOCK là kho vừa đủ một suất
+# (cá thể I1…); giữ lại sau cháy lấy cá thể khả dụng tươi nhất -> reserved == RECIPE_IDS.
+RECIPE_STOCK = stock_of(RECIPE)
+RECIPE_IDS = [it["id"] for it in RECIPE_STOCK]
 
 
 def ticks(seconds):
@@ -44,7 +50,7 @@ def payload(cid="C1"):
 
 def assigned(cid="C1", table_id="T1", **kw):
     c = {"id": cid, "table_id": table_id, "dish_id": DISH, "order_tick": 0, "state": "waiting",
-         "patience_ticks_left": ticks(Q["patience_s"]), "order_status": "assigned", "reserved": {}}
+         "patience_ticks_left": ticks(Q["patience_s"]), "order_status": "assigned", "reserved": []}
     c.update(kw)
     return c
 
@@ -55,7 +61,7 @@ def ready_stove(age):
 
 def session(age, stock=None, customers=None, pos=None, **scn):
     base = {"player": {"pos": list(pos or Q["start_pos"])}, "random_customers": False,
-            "stock": stock or {}, "customers": customers or [assigned()], "stoves": [ready_stove(age)]}
+            "stock": stock or [], "customers": customers or [assigned()], "stoves": [ready_stove(age)]}
     base.update(scn)
     return Session("quan", TUNING, base, 1)
 
@@ -89,39 +95,39 @@ class Burn(unittest.TestCase):
         self.assertEqual(rows[0]["tick"], 1)
         st = b1(s)
         self.assertEqual((st["state"], st["dish"]), ("idle", None), "bếp rảnh ngay")
-        self.assertEqual(s.snapshot()["stock"], {}, "nguyên liệu đã nấu bị mất, không hoàn lại")
+        self.assertEqual(s.snapshot()["stock"], [], "nguyên liệu đã nấu bị mất, không hoàn lại")
 
     def test_burnt_order_re_reserved_when_stock_enough(self):
-        s = session(BURN, stock=dict(RECIPE))
+        s = session(BURN, stock=[dict(it) for it in RECIPE_STOCK])
         rows = s.step(idle())
         self.assertEqual(rows[0]["data"], {"stove_id": "B1", "order_id": "C1", "dish_id": DISH,
                                            "order_status": "reserved"})
         c = c1(s)
-        self.assertEqual((c["order_status"], c["reserved"], c["state"]), ("reserved", dict(RECIPE), "waiting"))
+        self.assertEqual((c["order_status"], c["reserved"], c["state"]), ("reserved", RECIPE_IDS, "waiting"))
         self.assertEqual(c["order_tick"], 0, "giữ order_tick cũ để vẫn là đơn cũ nhất")
-        self.assertEqual(s.snapshot()["stock"], dict(RECIPE), "giữ chỗ không trừ tồn vật lý")
+        self.assertEqual([x["id"] for x in s.snapshot()["stock"]], RECIPE_IDS, "giữ chỗ không trừ tồn vật lý")
 
     def test_burnt_order_unfulfillable_when_stock_short(self):
         s = session(BURN)
         rows = s.step(idle())
         self.assertEqual(rows[0]["data"]["order_status"], "unfulfillable")
         c = c1(s)
-        self.assertEqual((c["order_status"], c["reserved"], c["state"]), ("unfulfillable", {}, "waiting"))
+        self.assertEqual((c["order_status"], c["reserved"], c["state"]), ("unfulfillable", [], "waiting"))
 
     def test_available_stock_excludes_other_reservations(self):
         other = {"id": "C2", "table_id": "T2", "dish_id": DISH, "order_tick": 0, "state": "waiting",
                  "patience_ticks_left": ticks(Q["patience_s"]), "order_status": "reserved",
-                 "reserved": dict(RECIPE)}
+                 "reserved": list(RECIPE_IDS)}
         if "T2" not in {t["id"] for t in Q["tables"]}:
             self.skipTest("cần bàn T2 (contract v1.1)")
-        s = session(BURN, stock=dict(RECIPE), customers=[assigned(), other])
+        s = session(BURN, stock=[dict(it) for it in RECIPE_STOCK], customers=[assigned(), other])
         rows = s.step(idle())
         self.assertEqual(rows[0]["data"]["order_status"], "unfulfillable",
                          "nguyên liệu trong kho đang được C2 giữ, không còn khả dụng cho C1")
 
     def test_burn_checked_before_interact_same_tick(self):
         # đứng ở bếp, bấm E đúng bước cháy: cháy trước, bếp idle -> E nấu lại đơn vừa giữ lại
-        s = session(BURN, stock=dict(RECIPE), pos=STOVE)
+        s = session(BURN, stock=[dict(it) for it in RECIPE_STOCK], pos=STOVE)
         rows = s.step(press())
         self.assertEqual([r["name"] for r in rows], ["dish_burnt", "cook_started"])
         self.assertEqual(rows[1]["data"]["order_id"], "C1")
@@ -142,7 +148,7 @@ class Burn(unittest.TestCase):
 
     def test_unfulfillable_order_is_not_cooked(self):
         s = Session("quan", TUNING, {"player": {"pos": list(STOVE)}, "random_customers": False,
-                                     "stock": dict(RECIPE),
+                                     "stock": [dict(it) for it in RECIPE_STOCK],
                                      "customers": [assigned(order_status="unfulfillable")]}, 1)
         self.assertEqual(s.step(press()), [], "đơn unfulfillable không được bếp lấy, kể cả khi kho có hàng")
 

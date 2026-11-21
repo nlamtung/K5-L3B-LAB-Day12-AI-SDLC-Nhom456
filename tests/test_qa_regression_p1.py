@@ -64,7 +64,8 @@ class QARegressionPhase1(unittest.TestCase):
     def test_ac_p1_07_byte_level_determinism_quan(self):
         """AC-P1-07: Chạy 2 lần cùng seed quan với cùng kho đầu vào phải tạo file JSONL giống hệt từng byte."""
         with Workdir() as w:
-            inv = write_json(w.path("inv.json"), {"items": {"ca_loc": 2, "bong_sung": 2}})
+            # v1.2 (TICKET-03): file kho là mảng cá thể
+            inv = write_json(w.path("inv.json"), {"items": [{"id": "I1", "kind": "ca_loc", "fresh": 100}, {"id": "I2", "kind": "ca_loc", "fresh": 100}, {"id": "I3", "kind": "bong_sung", "fresh": 100}, {"id": "I4", "kind": "bong_sung", "fresh": 100}]})
             out1 = w.path("quan1.jsonl")
             out2 = w.path("quan2.jsonl")
 
@@ -92,8 +93,8 @@ class QARegressionPhase1(unittest.TestCase):
             self.assertEqual(code_mode, 2, "Kịch bản lệch mode phải trả về mã 2")
 
             # 3. Đồng thời truyền cả --inventory và scenario.quan.stock
-            sc_conflict = write_json(w.path("sc_conflict.json"), {"quan": {"stock": {"ca_loc": 1}}})
-            inv_file = write_json(w.path("inv.json"), {"items": {"ca_loc": 1}})
+            sc_conflict = write_json(w.path("sc_conflict.json"), {"quan": {"stock": [{"id": "I1", "kind": "ca_loc", "fresh": 100}]}})
+            inv_file = write_json(w.path("inv.json"), {"items": [{"id": "I1", "kind": "ca_loc", "fresh": 100}]})
             code_conflict, _ = run_headless("--mode", "quan", "--seed", "1", "--ticks", "60",
                                             "--scenario", sc_conflict, "--inventory", inv_file,
                                             "--out", w.path("o3.jsonl"))
@@ -117,7 +118,7 @@ class QARegressionPhase1(unittest.TestCase):
             sc = write_json(w.path("sc_faint.json"), {
                 "gather": {
                     "player": {"pos": [20, 10], "oxygen_ticks": 1, "hp": 1},
-                    "hold": ["ca_loc", "bong_sung"]
+                    "hold": [{"id": "I1", "kind": "ca_loc", "fresh": 100}, {"id": "I2", "kind": "bong_sung", "fresh": 100}]  # v1.2: cá thể
                 }
             })
             out = w.path("faint.jsonl")
@@ -127,7 +128,7 @@ class QARegressionPhase1(unittest.TestCase):
             self.assertEqual(code, 0, err)
             with open(inv_out, encoding="utf-8") as f:
                 inv_data = json.load(f)
-            self.assertEqual(inv_data, {"items": {}}, "Ngất xỉu phải ghi file kho hoàn toàn rỗng")
+            self.assertEqual(inv_data, {"items": []}, "Ngất xỉu phải ghi file kho hoàn toàn rỗng (v1.2: mảng rỗng)")
 
 
 if __name__ == "__main__":

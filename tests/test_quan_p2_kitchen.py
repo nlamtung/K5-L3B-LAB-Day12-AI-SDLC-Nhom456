@@ -12,6 +12,13 @@ from chonoi.contract import load_contract
 from chonoi.inputs import InputState
 from chonoi.runner import Session
 
+from fractions import Fraction
+
+from helpers import stock_of
+
+# TICKET-03 (v1.2) [THAY THẾ]: kho là mảng cá thể; đơn reserved để trống `reserved` cho sim tự cấp theo id (tươi nhất,
+# hòa theo id), đơn khác giữ []. Giá chốt khi nấu = floor(giá × fresh trung bình / 100), hàng 100 hao 1 tick trước.
+
 TUNING = load_contract()["tuning"]
 Q = TUNING["quan"]
 MENU = TUNING["menu"]
@@ -38,14 +45,13 @@ def payload(cid, dish_id):
 
 def customer(cid, table_id, dish_id, **kw):
     c = {"id": cid, "table_id": table_id, "dish_id": dish_id, "order_tick": 0, "state": "waiting",
-         "patience_ticks_left": ticks(Q["patience_s"]), "order_status": "reserved",
-         "reserved": dict(MENU[dish_id]["recipe"])}
+         "patience_ticks_left": ticks(Q["patience_s"]), "order_status": "reserved"}
     c.update(kw)
     return c
 
 
 def assigned(cid, table_id, dish_id, **kw):
-    return customer(cid, table_id, dish_id, **{"order_status": "assigned", "reserved": {}, **kw})
+    return customer(cid, table_id, dish_id, **{"order_status": "assigned", "reserved": [], **kw})
 
 
 def eating(cid, table_id, dish_id, eat_left, tip=0):
@@ -54,11 +60,18 @@ def eating(cid, table_id, dish_id, eat_left, tip=0):
 
 
 def stock_for(*customers):
+    """Kho cá thể vừa đủ công thức cho các đơn reserved."""
     out = {}
     for c in customers:
-        for k, n in c["reserved"].items():
-            out[k] = out.get(k, 0) + n
-    return out
+        if c.get("order_status", "reserved") == "reserved":
+            for k, n in MENU[c["dish_id"]]["recipe"].items():
+                out[k] = out.get(k, 0) + n
+    return stock_of(out)
+
+
+def fresh_price(dish_id, ticks_in_quan=1):
+    f = 100 - Fraction(str(TUNING["freshness"]["quan_decay_per_s"])) / 60 * ticks_in_quan
+    return math.floor(MENU[dish_id]["price"] * f / 100)
 
 
 def session(pos, customers, **scn):
@@ -132,10 +145,10 @@ class NewDishes(unittest.TestCase):
                 self.assertEqual(names(rows), ["cook_started"])
                 recipe = MENU[dish_id]["recipe"]
                 items = [k for k in sorted(recipe) for _ in range(recipe[k])]
-                self.assertEqual(rows[0]["data"]["items"], items, "items sắp theo kind, đủ số lượng")
-                self.assertEqual(rows[0]["data"]["base_price"], MENU[dish_id]["price"])
+                self.assertEqual([x["kind"] for x in rows[0]["data"]["items"]], items, "items sắp theo kind, đủ số lượng")
+                self.assertEqual(rows[0]["data"]["base_price"], fresh_price(dish_id))
                 self.assertEqual(s.snapshot()["stoves"][0]["cook_ticks_left"], ticks(MENU[dish_id]["cook_s"]))
-                self.assertEqual(s.snapshot()["stock"], {}, "tiêu đúng phần giữ")
+                self.assertEqual(s.snapshot()["stock"], [], "tiêu đúng phần giữ")
 
     def test_lau_mam_full_flow_price_and_tip(self):
         c = assigned("C1", "T4", "lau_mam")

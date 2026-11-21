@@ -13,11 +13,14 @@ PYTHONPATH=tests:. python3 -m unittest discover -s tests -v    # Chạy toàn b�
 python3 -m chonoi.live --mode gather                           # Chơi trực tiếp trên trình duyệt (đổi sang --mode quan cho buổi tối)
 ```
 
-### Chạy nối 2 buổi (Headless / Live) qua file kho
+### Chạy nối 2 buổi (Headless / Live) qua file kho (Contract v1.2 — kho cá thể)
 ```bash
-python3 -m chonoi.headless --mode gather --seed 42 --scenario docs/proof/phase-1/integration/dock.json --inputs docs/proof/phase-1/integration/dock-inputs.json --ticks 1 --out gather.jsonl --inventory-out catch.json
+python3 -m chonoi.headless --mode gather --seed 42 --scenario docs/proof/phase-3/dock.json --inputs docs/proof/phase-3/dock-inputs.json --ticks 1 --out gather.jsonl --inventory-out catch.json
 python3 -m chonoi.headless --mode quan --seed 42 --inventory catch.json --ticks 0 --out quan.jsonl
+python3 -m chonoi.headless --mode day --seed 7 --days 2 --ticks 44400 --out day.jsonl      # vòng ngày gather → quan → shop
 ```
+File kho v1.2 là mảng cá thể `{"items":[{"id":"I1","kind":"ca_linh","fresh":99.99166666666666}]}` (schema: [`docs/contracts/README.md`](docs/contracts/README.md));
+file kho đếm cũ `{"items":{"ca_loc":1}}` bị từ chối với mã 2. Xem [`CHANGELOG.md`](CHANGELOG.md) để cập nhật fixture.
 
 ## Điều khiển & Cách tính điểm
 
@@ -26,8 +29,10 @@ python3 -m chonoi.headless --mode quan --seed 42 --inventory catch.json --ticks 
   - `E` (`interact`): Cập bến hoặc hái rau ở mặt nước (`gather`); nấu, bưng món hoặc phục vụ khách (`quan`).
   - `Space` (`catch`): Bắt đàn cá khi đang lặn dưới nước (`gather`).
   - `R`: Chơi lại từ đầu.
-- **Cách tính điểm (Test Contract v1.0):**
+- **Cách tính điểm (Test Contract v1.2):**
   - Công thức ở mọi snapshot và dòng `end`: `score = earned + 100 × floor(reputation)`.
+  - Giá món chốt lúc bắt đầu nấu theo độ tươi: `base_price = floor(giá niêm yết × trung bình fresh / 100)`; boa tính trên giá đã chốt.
+  - Độ tươi: giỏ −0.5/s, kho quán −0.25/s; dưới 30 là **ươn** (vẫn chiếm ô, không dùng nấu). HUD hiện thanh tươi, `%` theo loại và dấu ✕ cho hàng ươn.
   - Tiền (`money`, `earned`, `shift_earned`) tính bằng số nguyên (đơn vị nghìn đồng); boa (`tip`) = `floor(base_price × tip_rate)` khi tỷ lệ kiên nhẫn còn lại đạt `tip_min_patience_ratio` (cộng thêm `tip_reputation` vào uy tín). Khách bỏ đi vì hết kiên nhẫn trừ uy tín theo `left_reputation_delta`.
 
 ## Mở rộng đã làm (nhóm 5 người — yêu cầu ≥ 1 mục)
@@ -46,4 +51,4 @@ python3 -m chonoi.headless --mode quan --seed 42 --inventory catch.json --ticks 
 
 - Kiểm tra danh sách thành viên: `python3 tools/check_team.py`
 - Kỹ năng kiểm tra tự động của nhóm: `python3 .agents/skills/verify-contract/verify.py` · `python3 .agents/skills/qa-blackbox-check/run_qa.py`
-- Tài liệu: [`docs/verification/phase-1.md`](docs/verification/phase-1.md) · [`docs/clarify.md`](docs/clarify.md) · [`docs/ai-usage-log.md`](docs/ai-usage-log.md) · [`docs/standup.md`](docs/standup.md) · [`docs/retro.md`](docs/retro.md) · [`CREDITS.md`](CREDITS.md)
+- Tài liệu: [`docs/verification/phase-1.md`](docs/verification/phase-1.md) · [`phase-2.md`](docs/verification/phase-2.md) · [`phase-3.md`](docs/verification/phase-3.md) · [`ADR-0001`](docs/adr/0001-freshness-v12.md) · [`CHANGELOG.md`](CHANGELOG.md) · [`docs/clarify.md`](docs/clarify.md) · [`docs/ai-usage-log.md`](docs/ai-usage-log.md) · [`docs/standup.md`](docs/standup.md) · [`docs/retro.md`](docs/retro.md) · [`CREDITS.md`](CREDITS.md)

@@ -3,7 +3,10 @@
 import json
 import unittest
 
-from helpers import Workdir, events, frames, read_jsonl, run_headless, snapshots, write_json
+from helpers import Workdir, events, frames, items, kinds, read_jsonl, run_headless, snapshots, write_json
+
+# TICKET-03 (v1.2) [THAY THẾ]: giỏ / kho / lost là mảng cá thể {id, kind, fresh} — fixture và so sánh đổi theo,
+# thứ tự và lượng giữ nguyên ý nghĩa P1.
 
 
 class GatherSlice1OxygenAndFaint(unittest.TestCase):
@@ -68,7 +71,7 @@ class GatherSlice1OxygenAndFaint(unittest.TestCase):
         with Workdir() as w:
             sc = write_json(w.path("sc.json"), {"gather": {
                 "player": {"pos": [20, 10], "oxygen_ticks": 0, "zero_oxy_ticks": 59, "hp": 1},
-                "hold": ["ca_loc", "bong_sung", "ca_linh"],
+                "hold": items("ca_loc", "bong_sung", "ca_linh"),
             }})
             inv = w.path("inv.json")
             code, err = run_headless("--mode", "gather", "--seed", "1", "--ticks", "10", "--scenario", sc,
@@ -77,12 +80,14 @@ class GatherSlice1OxygenAndFaint(unittest.TestCase):
             rows = read_jsonl(w.path("o.jsonl"))
             self.assertEqual([e["name"] for e in events(rows)], ["choke", "faint", "gather_end"])
             faint = events(rows, "faint")[0]["data"]
-            self.assertEqual(faint, {"cause": "choke", "lost": ["ca_linh", "bong_sung", "ca_loc"], "hp": 0})
+            self.assertEqual((faint["cause"], faint["hp"]), ("choke", 0))
+            self.assertEqual([(x["id"], x["kind"]) for x in faint["lost"]],
+                             [("I3", "ca_linh"), ("I2", "bong_sung"), ("I1", "ca_loc")], "LIFO")
             end_ev = events(rows, "gather_end")[0]["data"]
-            self.assertEqual(end_ev, {"reason": "fainted", "inventory": {"items": {}}})
+            self.assertEqual(end_ev, {"reason": "fainted", "inventory": {"items": []}})
             self.assertEqual(rows[-1]["reason"], "fainted")
             with open(inv, encoding="utf-8") as f:
-                self.assertEqual(json.load(f), {"items": {}})
+                self.assertEqual(json.load(f), {"items": []})
 
 
 class GatherSlice2NodesAndFish(unittest.TestCase):
@@ -123,7 +128,7 @@ class GatherSlice2NodesAndFish(unittest.TestCase):
         with Workdir() as w:
             sc = write_json(w.path("sc.json"), {"gather": {
                 "player": {"pos": [12, 0]},
-                "hold": ["ca_loc"] * 12,
+                "hold": items(*["ca_loc"] * 12),
                 "nodes": [{"id": "N1", "kind": "bong_dien_dien", "pos": [12, 0]}],
             }})
             inp = write_json(w.path("in.json"), frames({"tick": 0, "interact": True}))
@@ -168,14 +173,15 @@ class GatherSlice2NodesAndFish(unittest.TestCase):
             self.assertEqual(caught[1]["data"], {"fish_id": "F10", "kind": "ca_loc", "yield": 1})
             last = snapshots(rows)[-1]
             self.assertEqual(last["fish"], [])
-            self.assertEqual(last["hold"], ["ca_linh", "ca_linh", "ca_linh", "ca_loc"])
+            self.assertEqual(kinds(last["hold"]), ["ca_linh", "ca_linh", "ca_linh", "ca_loc"])
+            self.assertEqual([x["id"] for x in last["hold"]], ["I1", "I2", "I3", "I4"], "id cấp theo thứ tự vào giỏ")
 
     def test_catch_hold_full_keeps_fish_and_no_cooldown_and_no_fallback(self):
         """Gần nhất là ca_linh (cần 3) khi chỉ còn 2 ô -> hold_full, không bắt ca_loc xa hơn, giữ nguyên cooldown."""
         with Workdir() as w:
             sc = write_json(w.path("sc.json"), {"gather": {
                 "player": {"pos": [20, 10]},
-                "hold": ["bong_sung"] * 10,
+                "hold": items(*["bong_sung"] * 10),
                 "fish": [
                     {"id": "F1", "kind": "ca_linh", "pos": [20.5, 10]},
                     {"id": "F2", "kind": "ca_loc", "pos": [21.5, 10]},
@@ -210,7 +216,9 @@ class GatherSlice2NodesAndFish(unittest.TestCase):
             rows = read_jsonl(w.path("o.jsonl"))
             self.assertEqual([e["name"] for e in events(rows)], ["fish_caught", "gather_end"])
             with open(inv, encoding="utf-8") as f:
-                self.assertEqual(json.load(f), {"items": {"ca_loc": 1}})
+                saved = json.load(f)["items"]
+            self.assertEqual([(x["id"], x["kind"]) for x in saved], [("I1", "ca_loc")])
+            self.assertEqual(saved[0]["fresh"], 100, "bắt ở bước cuối: hàng mới, chưa hao")
 
 
 if __name__ == "__main__":

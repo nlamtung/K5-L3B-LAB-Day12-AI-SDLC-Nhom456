@@ -31,3 +31,15 @@
 | Q17 | 2026-11-21 | Khách fixture `waiting` với `patience_ticks_left: 0` có hợp lệ? | Hợp lệ; rời ở bước 1 (sau interact) với `patience` | TV2 | `scenario._validate_customer` |
 | Q18 | 2026-11-21 | Ràng buộc `order_tick` của khách fixture? | Chỉ cần nguyên không âm | TV2 | `scenario._validate_customer` |
 | Q19 | 2026-11-21 | `payload.base_price` có phải bằng `menu.price`? | Chỉ kiểm nguyên dương (PRD nói "chốt giá", có thể đổi ở phase sau) | TV2 + TV3 | `scenario._payload` |
+
+## Phase 3 (TICKET-03, v1.2 độ tươi) — giả định đã dùng
+
+| # | Ngày | Câu hỏi | Giả định đang dùng | Ai quyết | Code |
+|---|---|---|---|---|---|
+| Q25 | 2026-11-21 | Biểu diễn độ tươi để so ngưỡng 30 và floor giá chính xác? | 240 đơn vị nguyên / điểm (ticket gợi ý): giỏ −2/tick, quán −1/tick; giá tính `Fraction` trên tổng đơn vị. Giá trị đọc vào lệch lưới giữ dạng `Fraction` | khanhduyvu1 (ADR-0001) | `chonoi/fresh.py` |
+| Q26 | 2026-11-21 | Trong một tick gather, `node_regrown` hay `spoiled` trước? | Cùng bước 1: hồi nút (`node_regrown`) rồi mới hao giỏ (`spoiled`) — theo thứ tự liệt kê "hồi nút và độ tươi" | khanhduyvu1 | `GatherSim.step` |
+| Q27 | 2026-11-21 | Hàng giữ vừa ươn, giữ lại thất bại: có event riêng không? | Không có event mới; chỉ đổi `order_status` sang `unfulfillable` (thấy trong snapshot). Đơn `unfulfillable` không tự quay lại `reserved` khi kho đổi | khanhduyvu1 | `QuanSim._tick_freshness` |
+| Q28 | 2026-11-21 | Nhiều đơn cùng bị ươn: nhả hết rồi mới giữ lại, hay xử lý lần lượt? | Lần lượt theo `order_tick` rồi id bàn: mỗi đơn nhả phần giữ của mình rồi thử giữ lại ngay | khanhduyvu1 | `QuanSim._tick_freshness` |
+| Q29 | 2026-11-21 | Thứ tự id trong `customers[].reserved` (snapshot)? | Sắp theo id (I2 trước I10) | khanhduyvu1 | `QuanSim.reserve_for` |
+| Q30 | 2026-11-21 | Event `gather` / `fish_caught` có thêm id cá thể không? | Giữ nguyên data v1.1 (`amount` / `yield`); id cá thể thấy trong `hold` snapshot | khanhduyvu1 | `GatherSim.step` |
+| Q31 | 2026-11-21 | Khách bị cháy món (mở rộng `burn`) có giá cũ không? | `base_price` về `null`, chốt lại theo độ tươi ở lần nấu sau | khanhduyvu1 | `QuanSim._burn` |

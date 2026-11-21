@@ -12,12 +12,23 @@ import subprocess
 import sys
 import unittest
 
-from helpers import ROOT, Workdir, events, frames, headless_cmd, read_jsonl, snapshots, write_json
+from helpers import ROOT, Workdir, counts, events, frames, headless_cmd, items, kinds, read_jsonl, snapshots, write_json
+
+from fractions import Fraction
+
+# TICKET-03 (v1.2) [THAY THẾ]: file kho / gather_end.inventory / stock là mảng cá thể {id, kind, fresh} theo id.
+# So id, kind chính xác và fresh ±0.01 (gather_end trong JSONL làm tròn 3 chữ số, file giữ đủ chính xác).
+# Giá bán chốt theo độ tươi khi nấu. File kho đếm (v1.0/v1.1) giờ là sai schema -> mã 2.
+def same_items(tc, got, want, msg=None):
+    tc.assertEqual([(x["id"], x["kind"]) for x in got], [(x["id"], x["kind"]) for x in want], msg)
+    for a, b in zip(got, want):
+        tc.assertAlmostEqual(a["fresh"], b["fresh"], delta=0.01, msg=msg)
 
 with open(os.path.join(ROOT, "game.contract.json"), encoding="utf-8") as _f:
     TUNING = json.load(_f)["tuning"]
 Q = TUNING["quan"]
 MENU = TUNING["menu"]
+FRESH = TUNING["freshness"]
 
 
 def run(*args):
@@ -36,7 +47,7 @@ def read_bytes(path):
 class GatherToQuan(unittest.TestCase):
     def dock(self, w, hold, name="catch.json"):
         """Buổi sáng cập bến ngay ở tick 0 với giỏ dựng sẵn; trả (rows gather, đường dẫn kho)."""
-        scn = write_json(w.path("dock.json"), {"gather": {"hold": hold}})
+        scn = write_json(w.path("dock.json"), {"gather": {"hold": items(*hold)}})
         inp = write_json(w.path("dock-in.json"), frames({"tick": 0, "interact": True}))
         inv = w.path(name)
         code, err = run("--mode", "gather", "--seed", "42", "--scenario", scn, "--inputs", inp,
@@ -52,23 +63,26 @@ class GatherToQuan(unittest.TestCase):
             self.assertEqual(end[0]["data"]["reason"], "docked")
             with open(inv, encoding="utf-8") as f:
                 file_inv = json.load(f)
-            self.assertEqual(file_inv, end[0]["data"]["inventory"], "file kho khớp object inventory trong gather_end")
-            self.assertEqual(file_inv, {"items": {"bong_sung": 2, "ca_linh": 1, "ca_loc": 1}})
+            self.assertEqual(set(file_inv), {"items"})
+            same_items(self, file_inv["items"], end[0]["data"]["inventory"]["items"],
+                       "file kho khớp object inventory trong gather_end")
+            self.assertEqual([x["id"] for x in file_inv["items"]], ["I1", "I2", "I3", "I4"], "xuất theo id")
+            self.assertEqual(counts(file_inv["items"]), {"bong_sung": 2, "ca_linh": 1, "ca_loc": 1})
             code, err = run("--mode", "quan", "--seed", "42", "--inventory", inv, "--ticks", "0",
                             "--out", w.path("q.jsonl"))
             self.assertEqual(code, 0, err)
             s0 = snapshots(read_jsonl(w.path("q.jsonl")))[0]
-            self.assertEqual(s0["stock"], file_inv["items"])
+            same_items(self, s0["stock"], file_inv["items"], "quán nhận nguyên id, kind, độ tươi")
             self.assertEqual((s0["money"], s0["earned"], s0["reputation"]), (0, 0, Q["reputation_initial"]))
 
     def test_empty_hold_gives_empty_inventory_and_empty_stock(self):
         with Workdir() as w:
             _, inv = self.dock(w, [])
-            self.assertEqual(read_bytes(inv).strip(), b'{"items":{}}')
+            self.assertEqual(read_bytes(inv).strip(), b'{"items":[]}')
             code, err = run("--mode", "quan", "--seed", "1", "--inventory", inv, "--ticks", "0",
                             "--out", w.path("q.jsonl"))
             self.assertEqual(code, 0, err)
-            self.assertEqual(snapshots(read_jsonl(w.path("q.jsonl")))[0]["stock"], {})
+            self.assertEqual(snapshots(read_jsonl(w.path("q.jsonl")))[0]["stock"], [])
 
     def test_quan_cooks_and_sells_with_ingredients_from_gather(self):
         """Hàng mang về thật sự được nấu và bán: kho từ gather + khách dựng sẵn -> nấu -> bưng -> phục vụ -> trả tiền."""
@@ -78,7 +92,7 @@ class GatherToQuan(unittest.TestCase):
             scn = write_json(w.path("q-scn.json"), {"quan": {
                 "player": {"pos": list(stove)}, "random_customers": False,
                 "customers": [{"id": "C1", "table_id": "T1", "dish_id": "ca_loc_nuong_trui",
-                               "reserved": {"ca_loc": 1}}]}})
+                               "reserved": ["I1"]}]}})
             cook = MENU["ca_loc_nuong_trui"]["cook_s"] * 60
             d = math.dist(stove, table)
             walk = math.ceil(d / Q["walk_speed"] * 60) + Q["ramp_max_ticks"] + 5
@@ -95,17 +109,21 @@ class GatherToQuan(unittest.TestCase):
                             "--inputs", inp, "--ticks", str(ticks), "--out", w.path("q.jsonl"))
             self.assertEqual(code, 0, err)
             rows = read_jsonl(w.path("q.jsonl"))
-            self.assertEqual(snapshots(rows)[0]["stock"], {"ca_loc": 1})
+            self.assertEqual([(x["id"], x["kind"]) for x in snapshots(rows)[0]["stock"]], [("I1", "ca_loc")])
             self.assertEqual([r["name"] for r in events(rows)],
                              ["cook_started", "dish_ready", "dish_picked", "served", "paid"])
-            self.assertEqual(events(rows, "cook_started")[0]["data"]["items"], ["ca_loc"])
-            self.assertEqual(snapshots(rows)[-1]["stock"], {}, "nguyên liệu từ gather đã được dùng")
-            price = MENU["ca_loc_nuong_trui"]["price"]
-            self.assertEqual(rows[-1]["earned"], price + math.floor(price * Q["tip_rate"]))
+            self.assertEqual(kinds(events(rows, "cook_started")[0]["data"]["items"]), ["ca_loc"])
+            self.assertEqual(snapshots(rows)[-1]["stock"], [], "nguyên liệu từ gather đã được dùng")
+            # hao 1 bước gather (0.5/s) rồi 1 bước quán (0.25/s) trước khi nấu -> giá chốt theo độ tươi
+            fresh = (100 - Fraction(str(FRESH["gather_decay_per_s"])) / 60
+                     - Fraction(str(FRESH["quan_decay_per_s"])) / 60)
+            price = math.floor(MENU["ca_loc_nuong_trui"]["price"] * fresh / 100)
+            self.assertEqual(events(rows, "cook_started")[0]["data"]["base_price"], price)
+            self.assertEqual(rows[-1]["earned"], price + math.floor(price * Fraction(str(Q["tip_rate"]))))
 
     def test_time_out_writes_inventory(self):
         with Workdir() as w:
-            scn = write_json(w.path("s.json"), {"gather": {"hold": ["bong_sung"], "time_left_ticks": 5}})
+            scn = write_json(w.path("s.json"), {"gather": {"hold": items("bong_sung"), "time_left_ticks": 5}})
             inv = w.path("catch.json")
             code, err = run("--mode", "gather", "--seed", "1", "--scenario", scn, "--ticks", "100",
                             "--out", w.path("g.jsonl"), "--inventory-out", inv)
@@ -114,11 +132,13 @@ class GatherToQuan(unittest.TestCase):
             self.assertEqual(events(rows, "gather_end")[0]["data"]["reason"], "time")
             self.assertEqual(rows[-1]["ticks"], 5, "dừng sớm khi gameplay kết thúc")
             with open(inv, encoding="utf-8") as f:
-                self.assertEqual(json.load(f), {"items": {"bong_sung": 1}})
+                saved = json.load(f)["items"]
+            self.assertEqual([(x["id"], x["kind"]) for x in saved], [("I1", "bong_sung")])
+            self.assertAlmostEqual(saved[0]["fresh"], 100 - 5 * FRESH["gather_decay_per_s"] / 60, delta=0.01)
 
     def test_tick_limit_does_not_create_or_overwrite_inventory(self):
         with Workdir() as w:
-            scn = write_json(w.path("s.json"), {"gather": {"hold": ["ca_loc"]}})
+            scn = write_json(w.path("s.json"), {"gather": {"hold": items("ca_loc")}})
             inv = w.path("catch.json")
             code, err = run("--mode", "gather", "--seed", "1", "--scenario", scn, "--ticks", "3",
                             "--out", w.path("g.jsonl"), "--inventory-out", inv)
@@ -137,7 +157,7 @@ class GatherToQuan(unittest.TestCase):
             g = TUNING["gather"]
             scn = write_json(w.path("s.json"), {"gather": {
                 "player": {"pos": [50, 10], "oxygen_ticks": 0, "hp": 1, "zero_oxy_ticks": 59},
-                "hold": ["ca_loc", "bong_sung"]}})
+                "hold": items("ca_loc", "bong_sung")}})
             inv = w.path("catch.json")
             code, err = run("--mode", "gather", "--seed", "1", "--scenario", scn,
                             "--ticks", str(g["choke_interval_ticks"] + 5),
@@ -147,7 +167,7 @@ class GatherToQuan(unittest.TestCase):
             if not end or end[0]["data"]["reason"] != "fainted":
                 self.skipTest("chờ lát 1 (oxy/ngạt/ngất) trong sim/gather.py")
             with open(inv, encoding="utf-8") as f:
-                self.assertEqual(json.load(f), {"items": {}}, "ngất -> kho rỗng")
+                self.assertEqual(json.load(f), {"items": []}, "ngất -> kho rỗng")
 
     def test_deterministic_inventory_and_jsonl_bytes(self):
         with Workdir() as w:
@@ -165,10 +185,16 @@ class GatherToQuan(unittest.TestCase):
         with Workdir() as w:
             out = w.path("q.jsonl")
             bad_files = {
-                "unknown_kind": {"items": {"ca_tra": 1}},
-                "negative": {"items": {"ca_loc": -1}},
-                "float": {"items": {"ca_loc": 1.5}},
-                "extra_root_key": {"items": {}, "money": 5},
+                "counted_v11": {"items": {"ca_loc": 1}},
+                "unknown_kind": {"items": items("ca_tra")},
+                "fresh_negative": {"items": items("ca_loc", fresh=-1)},
+                "fresh_over_100": {"items": items("ca_loc", fresh=100.5)},
+                "fresh_string": {"items": items("ca_loc", fresh="99")},
+                "dup_id": {"items": items("ca_loc") + items("ca_linh")},
+                "empty_id": {"items": [{"id": "", "kind": "ca_loc", "fresh": 50}]},
+                "missing_fresh": {"items": [{"id": "I1", "kind": "ca_loc"}]},
+                "extra_item_key": {"items": [{"id": "I1", "kind": "ca_loc", "fresh": 50, "qty": 1}]},
+                "extra_root_key": {"items": [], "money": 5},
                 "no_items": {"ca_loc": 1},
             }
             for name, obj in bad_files.items():
@@ -180,7 +206,7 @@ class GatherToQuan(unittest.TestCase):
     def test_inventory_and_scenario_stock_together_exit_2(self):
         with Workdir() as w:
             _, inv = self.dock(w, ["ca_loc"])
-            scn = write_json(w.path("q-scn.json"), {"quan": {"stock": {"ca_loc": 1}}})
+            scn = write_json(w.path("q-scn.json"), {"quan": {"stock": items("ca_loc", start=9)}})
             self.assertEqual(run("--mode", "quan", "--seed", "1", "--inventory", inv, "--scenario", scn,
                                  "--ticks", "0", "--out", w.path("q.jsonl"))[0], 2)
 

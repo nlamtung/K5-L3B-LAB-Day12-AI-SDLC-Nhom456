@@ -1,5 +1,5 @@
 {
-  "contract_version": "1.1",
+  "contract_version": "1.2",
   "team": "Nhom456",
   "team_size": 5,
   "extensions": ["burn"],
@@ -128,6 +128,7 @@
         ]
       }
     },
+    "freshness": {"initial": 100, "gather_decay_per_s": 0.5, "quan_decay_per_s": 0.25, "spoiled_below": 30},
     "score": {"reputation_multiplier": 100}
   }
 }

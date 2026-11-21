@@ -11,7 +11,11 @@ import unittest
 from chonoi.contract import load_contract
 from chonoi.inputs import InputState
 
-from helpers import ROOT, Workdir, events, frames, headless_cmd, read_jsonl, snapshots, write_json
+from helpers import ROOT, Workdir, counts, events, frames, headless_cmd, items, kinds, read_jsonl, snapshots, write_json
+
+# TICKET-03 (v1.2) [THAY THẾ]: gather.hold / stock là mảng cá thể {id, kind, fresh}. Fixture đổi sang items(...),
+# so lượng bằng counts(...), so id khi luật v1.2 quy định id (Ngày đầu giữ id mẫu, Ngày kế cấp id mới).
+HOLD3 = items("ca_loc", "bong_sung", "bong_sung")  # I1, I2, I3
 
 TUNING = load_contract()["tuning"]
 DAY_READY = "day_plan" in TUNING and "shop" in TUNING
@@ -46,7 +50,7 @@ def to_shop(s):
 
 def docked(days=1, quan_ticks=3, **day):
     """Ngày cập bến ngay ở bước 0 với giỏ dựng sẵn, ca quán rút ngắn để nhanh tới Shop."""
-    scn = {"gather": {"hold": ["ca_loc", "bong_sung", "bong_sung"]}, "quan": {"time_left_ticks": quan_ticks}}
+    scn = {"gather": {"hold": [dict(it) for it in HOLD3]}, "quan": {"time_left_ticks": quan_ticks}}
     if day:
         scn["day"] = day
     s = DaySession(TUNING, scn, 1, days)
@@ -77,23 +81,27 @@ class DayLoop(unittest.TestCase):
         self.assertEqual(snap["day_plan"]["dishes"], PLAN[1]["dishes"])
 
     def test_dock_hands_over_stock_same_tick(self):
-        s = DaySession(TUNING, {"gather": {"hold": ["ca_loc", "bong_sung", "bong_sung"]}}, 1, 1)
+        s = DaySession(TUNING, {"gather": {"hold": [dict(it) for it in HOLD3]}}, 1, 1)
         rows = s.step(inp(interact=True))
         self.assertEqual([(r["name"], r["phase"], r["tick"]) for r in rows],
                          [("gather_end", "gather", 1), ("phase_start", "quan", 1)])
         snap = s.snapshot()
         self.assertEqual((snap["phase"], snap["phase_tick"], snap["sim_tick"]), ("quan", 0, 1))
-        self.assertEqual(snap["stock"], {"bong_sung": 2, "ca_loc": 1})
+        self.assertEqual([x["id"] for x in snap["stock"]], ["I1", "I2", "I3"], "Ngày đầu giữ id mẫu, bàn giao theo id")
+        self.assertEqual(counts(snap["stock"]), {"bong_sung": 2, "ca_loc": 1})
+        end = next(r for r in rows if r["name"] == "gather_end")["data"]["inventory"]["items"]
+        for got, want in zip(snap["stock"], end):
+            self.assertAlmostEqual(got["fresh"], want["fresh"], delta=0.01, msg="bàn giao cùng tick, không hao thêm")
 
     def test_faint_still_opens_quan_with_empty_stock(self):
         scn = {"gather": {"player": {"pos": [50, 10], "oxygen_ticks": 0, "hp": 1, "zero_oxy_ticks": 59},
-                          "hold": ["ca_loc"]}}
+                          "hold": items("ca_loc")}}
         s = DaySession(TUNING, scn, 1, 1)
         rows = s.step(inp())
         end = next(r for r in rows if r["name"] == "gather_end")
         self.assertEqual(end["data"]["reason"], "fainted")
         self.assertEqual(names(rows)[-1], "phase_start")
-        self.assertEqual((s.phase, s.snapshot()["stock"]), ("quan", {}))
+        self.assertEqual((s.phase, s.snapshot()["stock"]), ("quan", []))
 
     def test_quan_end_opens_shop_same_tick(self):
         s = docked()
@@ -102,7 +110,7 @@ class DayLoop(unittest.TestCase):
         self.assertEqual((rows[-2]["phase"], rows[-1]["phase"]), ("quan", "shop"))
         snap = s.snapshot()
         self.assertEqual((snap["phase"], snap["phase_tick"], snap["time_left_ticks"]), ("shop", 0, SHOP["max_ticks"]))
-        self.assertEqual(snap["stock"], {"bong_sung": 2, "ca_loc": 1}, "Shop hiện kho dư của ca")
+        self.assertEqual(counts(snap["stock"]), {"bong_sung": 2, "ca_loc": 1}, "Shop hiện kho dư của ca")
 
     def test_shop_auto_closes_and_day_completes(self):
         s = docked()
@@ -177,8 +185,11 @@ class DayLoop(unittest.TestCase):
         s.step(inp(shop_done=True))
         snap = s.snapshot()
         self.assertEqual((snap["day"], snap["money"], snap["earned"], snap["reputation"]), (2, 50, 80, 4.0))
-        self.assertEqual(snap["hold"], ["ca_loc", "bong_sung", "bong_sung"],
+        self.assertEqual(kinds(snap["hold"]), ["ca_loc", "bong_sung", "bong_sung"],
                          "giỏ Ngày mới dựng lại từ mẫu gather (TICKET-02 4.3), không mang kho dư Ngày trước")
+        self.assertEqual([x["id"] for x in snap["hold"]], ["I4", "I5", "I6"],
+                         "v1.2: Ngày kế cấp id mới theo thứ tự mảng, nối tiếp xuyên Ngày")
+        self.assertEqual([x["fresh"] for x in snap["hold"]], [100, 100, 100], "kind/fresh ban đầu của mẫu")
 
     def test_pause_in_shop_freezes_timer_and_ignores_buy(self):
         s = docked(money=10_000, earned=10_000)
@@ -203,7 +214,7 @@ class DayLoop(unittest.TestCase):
 
     def test_quan_in_day_only_serves_plan_dishes(self):
         # D1 không có lẩu: dù kho đủ lẩu, khách chỉ được gọi món trong kế hoạch
-        hold = ["ca_linh", "ca_linh", "ca_linh", "bong_dien_dien", "ca_loc"]
+        hold = items("ca_linh", "ca_linh", "ca_linh", "bong_dien_dien", "ca_loc")
         s = DaySession(TUNING, {"gather": {"hold": hold}}, 1, 1)
         s.step(inp(interact=True))
         dishes = set()
@@ -241,7 +252,7 @@ class DayHeadless(unittest.TestCase):
     def test_cli_rejects_bad_day_flags(self):
         with Workdir() as w:
             out = w.path("o.jsonl")
-            inv = write_json(w.path("inv.json"), {"items": {}})
+            inv = write_json(w.path("inv.json"), {"items": []})
             bad = [["--days", "0"], ["--days", "6"], ["--inventory", inv], ["--inventory-out", w.path("x.json")]]
             for extra in bad:
                 with self.subTest(extra=extra):
@@ -266,7 +277,7 @@ class DayScenario(unittest.TestCase):
     def test_ticket_example_opens_day_with_money_and_hold(self):
         # đúng ví dụ TICKET-02 mục 4.3: tương tác lúc ở bến đóng ca sáng ngay
         scn_obj = {"day": {"money": 200, "earned": 200},
-                   "gather": {"hold": ["ca_loc", "bong_sung", "bong_sung"], "random_fish": False}}
+                   "gather": {"hold": [dict(it) for it in HOLD3], "random_fish": False}}
         with Workdir() as w:
             scn = write_json(w.path("s.json"), scn_obj)
             inp_f = write_json(w.path("i.json"), frames({"tick": 0, "interact": True}))
@@ -279,7 +290,7 @@ class DayScenario(unittest.TestCase):
                              [("gather_end", "gather"), ("phase_start", "quan")])
             snap = snapshots(rows)[-1]
             self.assertEqual((snap["phase"], snap["money"], snap["earned"]), ("quan", 200, 200))
-            self.assertEqual(snap["stock"], {"bong_sung": 2, "ca_loc": 1})
+            self.assertEqual(counts(snap["stock"]), {"bong_sung": 2, "ca_loc": 1})
 
     def test_scenario_upgrades_active_from_day_one(self):
         lv1 = next(e for e in SHOP["upgrades"]["hp"] if e["level"] == 1)
@@ -291,7 +302,7 @@ class DayScenario(unittest.TestCase):
     def test_bad_day_scenarios_exit_2(self):
         top = max(e["level"] for e in SHOP["upgrades"]["oxygen"])
         bad = {
-            "quan_stock": {"quan": {"stock": {"ca_loc": 1}}},
+            "quan_stock": {"quan": {"stock": items("ca_loc")}},
             "quan_reputation": {"quan": {"reputation": 4.0}},
             "money_gt_earned": {"day": {"money": 100, "earned": 50}},
             "money_without_earned": {"day": {"money": 100}},

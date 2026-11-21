@@ -149,7 +149,7 @@ def step_monsters(sim, events) -> bool:
 
     sim.hp = max(0, sim.hp - 1)
     drop_n = int(len(sim.hold) * m_cfg.get("loss_ratio", 0.5))
-    lost = [sim.hold.pop() for _ in range(drop_n)]
+    lost = sim.drop_lifo(drop_n)  # v1.2: mảng cá thể theo thứ tự bỏ (LIFO)
     sim.invuln_ticks = int(m_cfg.get("invuln_ticks", 90))
 
     rx = hitter["pos"][0] - sim.pos[0]
@@ -168,8 +168,7 @@ def step_monsters(sim, events) -> bool:
     }))
 
     if sim.hp <= 0:
-        rem_lost = list(reversed(sim.hold))
-        sim.hold.clear()
+        rem_lost = sim.drop_lifo(len(sim.hold))
         events.append(("faint", {"cause": "monster", "lost": rem_lost, "hp": 0}))
         sim._finish("fainted", events)
         return True

@@ -10,7 +10,10 @@ import json
 import os
 import unittest
 
-from helpers import ROOT, Workdir, events, read_jsonl, run_headless, snapshots, write_json
+from helpers import ROOT, Workdir, events, read_jsonl, run_headless, snapshots, stock_of, write_json
+
+# TICKET-03 (v1.2) [THAY THẾ]: kho quán là mảng cá thể, customers[].reserved là mảng id cá thể. Fixture dựng kho bằng
+# stock_of({kind: n}) (id I1, I2… theo kind), so phần giữ bằng id; luật lát 3 (lịch, bàn, kiên nhẫn) giữ nguyên.
 
 
 def tuning():
@@ -34,11 +37,11 @@ def cookable(stock):
 
 
 def one_dish_stock():
-    """Kho chỉ nấu được đúng một món (món có công thức ít nguyên liệu nhất)."""
+    """Kho (mảng cá thể) chỉ nấu được đúng một món (món có công thức ít nguyên liệu nhất)."""
     dish = min(sorted(MENU), key=lambda d: sum(MENU[d]["recipe"].values()))
-    stock = dict(MENU[dish]["recipe"])
-    assert cookable(stock) == [dish]
-    return dish, stock
+    counted = dict(MENU[dish]["recipe"])
+    assert cookable(counted) == [dish]
+    return dish, stock_of(counted)
 
 
 def plenty_stock():
@@ -46,12 +49,17 @@ def plenty_stock():
     for m in MENU.values():
         for k, n in m["recipe"].items():
             total[k] = total.get(k, 0) + 5 * n
-    return total
+    return stock_of(total)
 
 
 TABLE = sorted(t["id"] for t in Q["tables"])[0]
 STOVE = sorted(s["id"] for s in Q["stoves"])[0]
 DISH, DISH_STOCK = one_dish_stock()
+DISH_IDS = [it["id"] for it in DISH_STOCK]  # phần giữ đúng công thức của DISH trên kho DISH_STOCK
+
+
+def id_kind(item_list):
+    return [(it["id"], it["kind"]) for it in item_list]
 PRICE = MENU[DISH]["price"]
 
 
@@ -92,11 +100,11 @@ class Arrivals(unittest.TestCase):
             c = s[first]["customers"][0]
             self.assertEqual(list(c), CUSTOMER_KEYS, "khách trong snapshot theo trường mục D")
             self.assertEqual((c["state"], c["order_status"], c["order_tick"]), ("waiting", "reserved", first))
-            self.assertEqual(c["reserved"], MENU[DISH]["recipe"])
+            self.assertEqual(c["reserved"], DISH_IDS)
             self.assertEqual(c["patience_ticks_left"], ticks(Q["patience_s"]))
             self.assertEqual(s[first + 1]["customers"][0]["patience_ticks_left"], ticks(Q["patience_s"]) - 1,
                              "kiên nhẫn bắt đầu giảm từ bước sau")
-            self.assertEqual(s[first]["stock"], DISH_STOCK, "stock là tồn vật lý, gồm cả phần giữ")
+            self.assertEqual(id_kind(s[first]["stock"]), id_kind(DISH_STOCK), "stock là tồn vật lý, gồm cả phần giữ")
             self.assertEqual({t["id"]: t["customer_id"] for t in s[first]["tables"]}[TABLE], "C1")
 
     def test_lich_theo_phase_tick_ke_ca_khi_rut_ngan_ca(self):
@@ -109,7 +117,7 @@ class Arrivals(unittest.TestCase):
 
     def test_no_dish_data_rong_khi_co_ban_ma_thieu_mon(self):
         with Workdir() as w:
-            code, err, rows = run_quan(w, {"stock": {}}, Q["first_customer_tick"])
+            code, err, rows = run_quan(w, {"stock": []}, Q["first_customer_tick"])
             self.assertEqual(code, 0, err)
             self.assertEqual([(e["tick"], e["data"]) for e in events(rows, "no_dish")], [(Q["first_customer_tick"], {})])
             self.assertEqual(snapshots(rows)[-1]["customers"], [])
@@ -170,7 +178,7 @@ class Leaving(unittest.TestCase):
 
     def test_khach_roi_bo_mon_cua_don_tren_bep_va_tay(self):
         for where in ("stove", "hand"):
-            block = {"stock": {}, "random_customers": False,
+            block = {"stock": [], "random_customers": False,
                      "customers": [cust(order_status="assigned", patience_ticks_left=1)]}
             if where == "stove":
                 block["stoves"] = [{"id": STOVE, "state": "ready", "dish": payload()}]
@@ -180,7 +188,7 @@ class Leaving(unittest.TestCase):
                 code, err, rows = run_quan(w, block, 1, every=1)
                 self.assertEqual(code, 0, (where, err))
                 s = by_tick(rows)
-                self.assertEqual(s[0]["customers"][0]["reserved"], {}, "đơn assigned giữ rỗng")
+                self.assertEqual(s[0]["customers"][0]["reserved"], [], "đơn assigned giữ rỗng")
                 self.assertEqual(events(rows, "customer_left")[0]["data"]["reason"], "patience")
                 self.assertIsNone(s[1]["hand"])
                 st = s[1]["stoves"][0]
@@ -189,19 +197,19 @@ class Leaving(unittest.TestCase):
 
 class Fixtures(unittest.TestCase):
     def test_reserved_mac_dinh_theo_cong_thuc(self):
-        for c in (cust(), cust(reserved=MENU[DISH]["recipe"])):
+        for c in (cust(), cust(reserved=DISH_IDS)):
             with Workdir() as w:
                 code, err, rows = run_quan(w, {"stock": DISH_STOCK, "customers": [c]}, 0)
                 self.assertEqual(code, 0, err)
                 got = snapshots(rows)[0]["customers"][0]
-                self.assertEqual(got["reserved"], MENU[DISH]["recipe"])
+                self.assertEqual(got["reserved"], DISH_IDS)
                 self.assertEqual((got["state"], got["order_status"], got["order_tick"]), ("waiting", "reserved", 0))
 
     def test_giu_qua_ton_exit_2_ke_ca_kho_tu_inventory(self):
         with Workdir() as w:
-            self.assertEqual(run_quan(w, {"stock": {}, "customers": [cust()]}, 0)[0], 2)
+            self.assertEqual(run_quan(w, {"stock": [], "customers": [cust()]}, 0)[0], 2)
             self.assertFalse(os.path.exists(w.path("q.jsonl")))
-            inv = write_json(w.path("inv.json"), {"items": {}})
+            inv = write_json(w.path("inv.json"), {"items": []})  # v1.2: kho rỗng hợp lệ, lỗi là do giữ quá tồn
             self.assertEqual(run_quan(w, {"customers": [cust()]}, 0, extra=("--inventory", inv))[0], 2)
             ok = write_json(w.path("ok.json"), {"items": DISH_STOCK})
             self.assertEqual(run_quan(w, {"customers": [cust()]}, 0, extra=("--inventory", ok))[0], 0)
@@ -238,8 +246,9 @@ class Fixtures(unittest.TestCase):
             {"customers": [cust(mood="vui")]}, {"customers": [cust(price=10)]},
             {"customers": [cust(patience_ticks_left=-1)]}, {"customers": [cust(patience_ticks_left=ticks(Q["patience_s"]) + 1)]},
             {"customers": [cust(order_tick=-1)]}, {"customers": [cust(eat_ticks_left=5)]},
-            {"customers": [cust(reserved={"ca_linh": 1})]}, {"customers": [cust(reserved={})]},
-            {"customers": [cust(order_status="unfulfillable", reserved=MENU[DISH]["recipe"])]},
+            {"customers": [cust(reserved=[next(it["id"] for it in plenty_stock() if it["kind"] == "ca_linh")])]},
+            {"customers": [cust(reserved=[])]}, {"customers": [cust(reserved=["I999"])]},
+            {"customers": [cust(order_status="unfulfillable", reserved=[plenty_stock()[0]["id"]])]},
             {"customers": [cust(state="eating", order_status="reserved", eat_ticks_left=1, base_price=PRICE, tip=0)]},
             {"customers": [cust(order_status="served")]},
             {"customers": [dict(eating, eat_ticks_left=0)]},
@@ -299,7 +308,7 @@ class Units(unittest.TestCase):
         self.assertEqual([(k, n, d) for k, n, d in ev],
                          [(first, "customer_arrived", {"order_id": "C1", "table_id": "T1", "dish_id": DISH}),
                           (first + iv, "no_dish", {})])
-        self.assertEqual(sim.available_stock(), {k: 0 for k in DISH_STOCK})
+        self.assertEqual(sim.available_stock(), {}, "cá thể duy nhất đang bị C1 giữ")
 
     def test_het_ban_thi_bo_luot(self):
         t = copy.deepcopy(T)

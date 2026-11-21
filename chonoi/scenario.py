@@ -3,6 +3,8 @@
 KHUNG: kiểm cú pháp, id trùng, bộ đếm âm, khoang vượt sức chứa, trường lạ.
 Lát 3 (TV2): kiểm mâu thuẫn mức luật của quán theo PRD-0 mục D (khách, đơn, bếp, tay, liên kết đơn ↔ món).
 Riêng "giữ quá tồn" kiểm ở QuanSim (lúc đó mới biết kho thật, kể cả khi kho đến từ --inventory).
+v1.2 (TICKET-03): gather.hold và quan.stock là mảng cá thể {id, kind, fresh}; customers[].reserved là mảng id cá thể
+(liên kết tới kho — có thật, chưa ươn, đủ công thức, không dùng chung — kiểm ở QuanSim vì kho có thể đến từ --inventory).
 day (v1.1 mục 4.3, TV3): nhận khối gather, quan làm mẫu khởi tạo mỗi Ngày và khối day {money, earned, reputation,
 upgrades, day_plan}; cấm quan.stock / quan.reputation; trả về {"gather", "quan", "day"}.
 """
@@ -10,7 +12,7 @@ upgrades, day_plan}; cấm quan.stock / quan.reputation; trả về {"gather", "
 import json
 
 from .errors import BadInput
-from .inventory import KINDS_P2, validate_items
+from .inventory import KINDS_P2, validate_item_list, validate_items
 
 GATHER_KEYS = {"player", "hold", "nodes", "fish", "random_fish", "monsters", "time_left_ticks"}
 GATHER_PLAYER_KEYS = {"pos", "vel", "heading_deg", "hp", "oxygen_ticks", "zero_oxy_ticks",
@@ -155,6 +157,11 @@ def load_scenario(path, mode: str, tuning: dict) -> dict:
     return block
 
 
+def _v12(tuning) -> bool:
+    """Contract v1.2 có khối tuning.freshness (kho cá thể)."""
+    return tuning.get("freshness") is not None
+
+
 def _num(v):
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
@@ -183,7 +190,9 @@ def _validate_gather(b, tuning):
         raise BadInput("random_fish phải là boolean")
     if "hold" in b:
         h = b["hold"]
-        if not isinstance(h, list) or any(k not in KINDS_P2 for k in h):
+        if _v12(tuning):
+            validate_item_list(h, "gather.hold")
+        elif not isinstance(h, list) or any(k not in KINDS_P2 for k in h):
             raise BadInput("hold phải là mảng id nguyên liệu hợp lệ")
         if len(h) > g["hold_capacity"]:
             raise BadInput("hold vượt sức chứa")
@@ -343,15 +352,12 @@ def _validate_customer(c, q, menu):
     if "base_price" in c and (isinstance(c["base_price"], bool) or not isinstance(c["base_price"], int)
                               or c["base_price"] <= 0):
         raise BadInput(f"customers.{cid}: base_price phải là số nguyên dương")
-    recipe = {k: v for k, v in menu[c["dish_id"]]["recipe"].items() if v > 0}
     if "reserved" in c:
-        try:
-            held = validate_items(c["reserved"])
-        except BadInput as e:
-            raise BadInput(f"customers.{cid}.reserved: {e}")
-        want = recipe if status == "reserved" else {}
-        if held != want:
-            raise BadInput(f"customers.{cid}: reserved {held} khác {'công thức' if want else 'rỗng'} của đơn {status}")
+        r = c["reserved"]
+        if not (isinstance(r, list) and all(isinstance(x, str) and x for x in r) and len(set(r)) == len(r)):
+            raise BadInput(f"customers.{cid}.reserved phải là mảng id cá thể khác rỗng, không trùng (v1.2)")
+        if status != "reserved" and r:
+            raise BadInput(f"customers.{cid}: đơn {status} phải có reserved rỗng")
     if (state == "eating") != (status == "served"):
         raise BadInput(f"customers.{cid}: khách eating khi và chỉ khi đơn served")
     if state == "eating":
@@ -393,7 +399,10 @@ def _validate_quan(b, tuning):
         if arr in b:
             _check_ids(arr, b[arr])
     if "stock" in b:
-        validate_items(b["stock"])
+        if _v12(tuning):
+            validate_item_list(b["stock"], "quan.stock")
+        else:
+            validate_items(b["stock"])
     if "random_customers" in b and not isinstance(b["random_customers"], bool):
         raise BadInput("random_customers phải là boolean")
     if "reputation" in b:

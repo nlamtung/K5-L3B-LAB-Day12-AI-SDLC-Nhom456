@@ -8,7 +8,7 @@ from chonoi.contract import load_contract
 from chonoi.ids import IdAllocator
 from chonoi.rng import Streams
 from chonoi.sim.gather import GatherSim
-from helpers import Workdir, close, events, frames, read_jsonl, run_headless, snapshots, write_json
+from helpers import Workdir, close, events, frames, items, kinds, read_jsonl, run_headless, snapshots, write_json
 
 
 class GatherP2Fish(unittest.TestCase):
@@ -84,7 +84,8 @@ class GatherP2Monsters(unittest.TestCase):
         with Workdir() as w:
             sc = write_json(w.path("sc.json"), {"gather": {
                 "player": {"pos": [60, 24], "hp": 3},
-                "hold": ["ca_loc", "bong_sung", "ca_linh", "ca_keo", "keo_neo"],  # 5 -> mất floor(5/2)=2 LIFO
+                # v1.2: giỏ là cá thể I1..I5; 5 -> mất floor(5/2)=2 theo LIFO (I5 rồi I4)
+                "hold": items("ca_loc", "bong_sung", "ca_linh", "ca_keo", "keo_neo"),
                 "random_fish": False,
                 "monsters": [{"id": "M1", "kind": "ca_sau", "pos": [61, 24],
                               "waypoints": [[60, 24], [64, 24]], "target_idx": 1, "state": "patrol"}],
@@ -99,7 +100,8 @@ class GatherP2Monsters(unittest.TestCase):
             self.assertEqual(hits[0]["tick"], 1)
             self.assertEqual(hits[0]["data"]["monster_id"], "M1")
             self.assertEqual(hits[0]["data"]["hp"], 2)
-            self.assertEqual(hits[0]["data"]["lost"], ["keo_neo", "ca_keo"])
+            lost = hits[0]["data"]["lost"]  # v1.2: mảng cá thể theo thứ tự bỏ
+            self.assertEqual([(x["id"], x["kind"]) for x in lost], [("I5", "keo_neo"), ("I4", "ca_keo")])
             snaps = {r["tick"]: r for r in snapshots(rows)}
             self.assertEqual(snaps[1]["player"]["invuln_ticks"], 90)
             self.assertEqual(snaps[1]["monsters"][0]["state"], "recoil")
@@ -112,7 +114,7 @@ class GatherP2Monsters(unittest.TestCase):
         with Workdir() as w:
             sc = write_json(w.path("sc.json"), {"gather": {
                 "player": {"pos": [60, 24], "hp": 1},
-                "hold": ["ca_loc", "bong_sung", "ca_linh"],  # mất 1 khi hit (ca_linh), còn 2 khi faint LIFO
+                "hold": items("ca_loc", "bong_sung", "ca_linh"),  # mất 1 khi hit (I3), còn 2 khi faint LIFO
                 "random_fish": False,
                 "monsters": [{"id": "M1", "kind": "ca_sau", "pos": [60, 24],
                               "waypoints": [[60, 24], [64, 24]]}],
@@ -123,12 +125,13 @@ class GatherP2Monsters(unittest.TestCase):
             self.assertEqual(code, 0, err)
             rows = read_jsonl(w.path("o.jsonl"))
             self.assertEqual([e["name"] for e in events(rows)], ["monster_hit", "faint", "gather_end"])
-            self.assertEqual(events(rows, "monster_hit")[0]["data"]["lost"], ["ca_linh"])
-            self.assertEqual(events(rows, "faint")[0]["data"],
-                             {"cause": "monster", "lost": ["bong_sung", "ca_loc"], "hp": 0})
+            self.assertEqual(kinds(events(rows, "monster_hit")[0]["data"]["lost"]), ["ca_linh"])
+            faint = events(rows, "faint")[0]["data"]
+            self.assertEqual((faint["cause"], faint["hp"]), ("monster", 0))
+            self.assertEqual([x["id"] for x in faint["lost"]], ["I2", "I1"], "LIFO: vào sau bỏ trước")
             self.assertEqual(rows[-1]["reason"], "fainted")
             with open(inv, encoding="utf-8") as f:
-                self.assertEqual(json.load(f), {"items": {}})
+                self.assertEqual(json.load(f), {"items": []}, "v1.2: kho rỗng là mảng rỗng")
 
     def test_monster_ignores_player_above_depth_10(self):
         with Workdir() as w:

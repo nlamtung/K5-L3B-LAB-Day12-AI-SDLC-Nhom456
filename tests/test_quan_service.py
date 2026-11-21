@@ -13,7 +13,12 @@ from chonoi.contract import load_contract
 from chonoi.inputs import InputState
 from chonoi.runner import Session
 
-from helpers import ROOT, Workdir, events, read_jsonl, write_json
+from helpers import ROOT, Workdir, events, items, read_jsonl, write_json
+
+from fractions import Fraction
+
+# TICKET-03 (v1.2) [THAY THẾ]: kho là mảng cá thể, reserved là mảng id; giá chốt theo độ tươi khi bắt đầu nấu
+# (hàng 100 hao 1 tick ở quán trước tương tác -> gỏi 40 chốt 39). Boa tính trên giá đã chốt.
 
 TUNING = load_contract()["tuning"]
 Q = TUNING["quan"]
@@ -35,7 +40,7 @@ def press():
 
 def assigned(**kw):
     c = {"id": "C1", "table_id": "T1", "dish_id": "lau_ca_linh_dien_dien", "order_tick": 0, "state": "waiting",
-         "patience_ticks_left": PATIENCE, "order_status": "assigned", "reserved": {}}
+         "patience_ticks_left": PATIENCE, "order_status": "assigned", "reserved": []}
     c.update(kw)
     return c
 
@@ -160,10 +165,10 @@ class Closing(unittest.TestCase):
         self.assertEqual(snap["customers"], [])
 
     def test_reserved_order_released_keeps_stock(self):
-        c = assigned(order_status="reserved", reserved={"ca_loc": 1}, dish_id="ca_loc_nuong_trui")
-        s = session(customers=[c], hand=None, time_left_ticks=1, stock={"ca_loc": 1})
+        c = assigned(order_status="reserved", reserved=["I1"], dish_id="ca_loc_nuong_trui")
+        s = session(customers=[c], hand=None, time_left_ticks=1, stock=items("ca_loc"))
         s.step(idle())
-        self.assertEqual(s.snapshot()["stock"], {"ca_loc": 1}, "nhả phần giữ, không mất nguyên liệu")
+        self.assertEqual([x["id"] for x in s.snapshot()["stock"]], ["I1"], "nhả phần giữ, không mất nguyên liệu")
 
 
 class FullFlowHeadless(unittest.TestCase):
@@ -172,9 +177,10 @@ class FullFlowHeadless(unittest.TestCase):
     def test_cook_pick_serve_pay(self):
         with Workdir() as w:
             scn = write_json(w.path("s.json"), {"quan": {
-                "player": {"pos": list(STOVE)}, "random_customers": False, "stock": {"bong_sung": 2},
+                "player": {"pos": list(STOVE)}, "random_customers": False,
+                "stock": items("bong_sung", "bong_sung"),
                 "customers": [{"id": "C1", "table_id": "T1", "dish_id": "goi_bong_sung",
-                               "reserved": {"bong_sung": 2}}]}})
+                               "reserved": ["I1", "I2"]}]}})
             cook = MENU["goi_bong_sung"]["cook_s"] * 60
             # đi từ bếp (2,8) tới bàn (9,2): dx=7, dz=-6 -> đi theo hướng chuẩn hóa
             dist = math.dist(STOVE, TABLE)
@@ -197,8 +203,10 @@ class FullFlowHeadless(unittest.TestCase):
             rows = read_jsonl(out)
             seq = [r["name"] for r in events(rows)]
             self.assertEqual(seq, ["cook_started", "dish_ready", "dish_picked", "served", "paid"])
-            price = MENU["goi_bong_sung"]["price"]
-            tip = math.floor(price * Q["tip_rate"])
+            fresh = 100 - Fraction(str(TUNING["freshness"]["quan_decay_per_s"])) / 60  # hao 1 tick trước khi nấu
+            price = math.floor(MENU["goi_bong_sung"]["price"] * fresh / 100)
+            self.assertEqual(events(rows, "cook_started")[0]["data"]["base_price"], price)
+            tip = math.floor(price * Fraction(str(Q["tip_rate"])))
             end = rows[-1]
             self.assertEqual((end["money"], end["earned"]), (price + tip, price + tip))
             self.assertEqual(end["score"], price + tip + 100 * math.floor(end["reputation"]))

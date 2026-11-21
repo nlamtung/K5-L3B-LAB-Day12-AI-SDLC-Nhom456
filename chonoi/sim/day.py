@@ -12,6 +12,10 @@ Một Ngày: day_start → day_plan → phase_start(gather) → … gather_end �
 - Pause: dùng chung `PauseGate` với gather/quan; khi pause mọi timer (kể cả Shop) đứng yên.
 - Mọi số liệu đọc từ tuning (`day_plan`, `shop`); không hard-code.
 
+v1.2 (TICKET-03): bàn giao mảng cá thể {id, kind, fresh} trong cùng tick chuyển pha (không hao thêm, ca quán chạy
+từ bước sau). Ngày đầu giữ nguyên id trong mẫu gather.hold; các Ngày kế cấp id mới theo thứ tự mảng với kind/fresh
+ban đầu (id I… nối tiếp xuyên pha và Ngày). Hàng thô ở Shop không hao; kho dư bị bỏ sau Shop.
+
 Quán trong day chỉ nhận món của kế hoạch Ngày (`QuanSim(plan_dishes=...)`). `GatherSim` nhận thêm `day=` nếu
 lớp hỗ trợ (bố trí thủy quái theo Ngày, M2 từ Ngày 3).
 """
@@ -20,6 +24,7 @@ import copy
 import inspect
 
 from ..errors import BadInput
+from ..fresh import Freshness
 from ..ids import IdAllocator
 from ..rng import Streams
 from ..runner import PauseGate, score_of
@@ -67,6 +72,7 @@ class DaySession:
         self.streams = Streams(seed)
         self.ids = IdAllocator()  # id khách/cá nối tiếp xuyên Ngày trong cùng lượt
         self.gate = PauseGate()
+        self.fresh = Freshness(tuning)
         self.tick = 0
         self.sim_tick = 0
         self.phase_tick = 0
@@ -117,14 +123,21 @@ class DaySession:
     def _sync_into(self, sim):
         sim.money, sim.earned, sim.reputation = self.money, self.earned, self.reputation
 
+    def _gather_template(self):
+        """Mẫu gather của Ngày: Ngày 1 giữ id trong gather.hold; Ngày kế cấp id mới theo thứ tự mảng (v1.2)."""
+        tpl = copy.deepcopy(self.tpl_gather)
+        if self.day > 1 and tpl.get("hold"):
+            tpl["hold"] = [dict(it, id=self.ids.new("I")) for it in tpl["hold"]]
+        return tpl
+
     def _build_gather(self):
         kw = {"day": self.day} if _accepts(GatherSim, "day") else {}
-        self.sim = GatherSim(self._day_tuning(), copy.deepcopy(self.tpl_gather), self.streams, self.ids, **kw)
+        self.sim = GatherSim(self._day_tuning(), self._gather_template(), self.streams, self.ids, **kw)
         self._sync_into(self.sim)
         self.phase, self.phase_tick = "gather", 0
 
     def _build_quan(self, items):
-        self.sim = QuanSim(self.tuning, copy.deepcopy(self.tpl_quan), self.streams, self.ids, inventory=dict(items),
+        self.sim = QuanSim(self.tuning, copy.deepcopy(self.tpl_quan), self.streams, self.ids, inventory=list(items),
                            plan_dishes=list(self.plan[self.day]["dishes"]))
         self._sync_into(self.sim)
         self.sim.shift_earned = 0
@@ -133,7 +146,7 @@ class DaySession:
     def _build_shop(self, leftover):
         self.sim = None
         self.shop_left = self.tuning["shop"]["max_ticks"]
-        self.shop_stock = {k: leftover[k] for k in sorted(leftover) if leftover[k] > 0}
+        self.shop_stock = [dict(it) for it in leftover]  # cá thể dư từ ca, không hao ở Shop
         self.phase, self.phase_tick = "shop", 0
 
     # --- một bước ------------------------------------------------------------------------
@@ -158,8 +171,7 @@ class DaySession:
         if not self.sim.done:
             return events
         if phase == "gather":
-            items = next(data["inventory"]["items"] for name, data in out if name == "gather_end")
-            self._build_quan(items)
+            self._build_quan(self.sim.handoff_items())  # bản chính xác, cùng tick, không hao thêm
             events.append((day, "quan", "phase_start", {}))
         else:
             self._build_shop(self.sim.stock)
@@ -223,7 +235,7 @@ class DaySession:
              "day": self.day, "day_plan": copy.deepcopy(self.plan[self.day]),
              "upgrades": dict(self.upgrades), "active_upgrades": dict(self.active_upgrades)}
         if self.phase == "shop":
-            s["stock"] = dict(self.shop_stock)
+            s["stock"] = self.fresh.out_list(self.shop_stock)
         else:
             s.update(self.sim.snapshot())
         return s
