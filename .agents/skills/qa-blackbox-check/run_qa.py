@@ -8,16 +8,15 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
-def run_tests():
-    print("=== BẮT ĐẦU CHẠY UNIT & REGRESSION TESTS ===")
+def run_tests(phase=4):
+    print(f"=== BẮT ĐẦU CHẠY UNIT & REGRESSION TESTS (PHASE {phase}) ===")
     env = os.environ.copy()
     env["PYTHONPATH"] = f"{os.path.join(ROOT, 'tests')}:{ROOT}"
 
-    proof_dir = os.path.join(ROOT, "docs", "proof", "phase-1")
+    proof_dir = os.path.join(ROOT, "docs", "proof", f"phase-{phase}")
     os.makedirs(proof_dir, exist_ok=True)
     proof_file = os.path.join(proof_dir, "test-suite.txt")
 
-    # Bỏ qua test_live nếu chạy trong môi trường sandbox không có socket
     cmd = [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"]
     proc = subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True)
 
@@ -34,7 +33,12 @@ def run_tests():
 
 
 def main():
-    ok = run_tests()
+    import argparse
+    p = argparse.ArgumentParser(description="Chạy kiểm thử QA theo phase")
+    p.add_argument("--phase", type=int, default=4, help="Phase cần xuất proof (mặc định 4)")
+    args = p.parse_args()
+
+    ok = run_tests(phase=args.phase)
     return 0 if ok else 1
 
 
