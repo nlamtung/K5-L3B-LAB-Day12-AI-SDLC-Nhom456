@@ -1,0 +1,5 @@
+PASS: game.contract.json hợp lệ (team_size=5)
+Kiểm tra tính tất định (gather)...
+PASS: Tính tất định từng byte (gather) ĐẠT.
+
+===> TẤT CẢ KIỂM TRA HỢP ĐỒNG ĐẠT CHUẨN <===

@@ -1,0 +1,12 @@
+{
+  "resolution": "1280x720",
+  "duration_s": 30.0,
+  "warmup_s": 3.0,
+  "total_frames": 1800,
+  "avg_fps": 87843.27,
+  "min_fps": 19624.0,
+  "max_fps": 102997.44,
+  "frame_time_ms_avg": 0.0114,
+  "frame_time_ms_p99": 0.0142,
+  "status": "PASS"
+}

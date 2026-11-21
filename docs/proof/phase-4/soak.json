@@ -1,0 +1,13 @@
+{
+  "seed": 7,
+  "days_requested": 10,
+  "days_completed": 10,
+  "total_ticks": 222000,
+  "duration_s": 1.6384,
+  "ticks_per_s": 135496.19,
+  "crashes": 0,
+  "status": "PASS",
+  "final_score": 300,
+  "final_money": 0,
+  "final_reputation": 3.0
+}
