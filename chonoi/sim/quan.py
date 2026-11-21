@@ -38,10 +38,16 @@ class QuanSim:
     mode = "quan"
     phase = "quan"
 
-    def __init__(self, tuning, scenario, streams, ids, inventory=None):
+    def __init__(self, tuning, scenario, streams, ids, inventory=None, plan_dishes=None):
+        """`plan_dishes` (TICKET-02, chỉ dùng trong `--mode day`): map/danh sách id món của kế hoạch Ngày.
+        Có thì khách chỉ chọn món trong kế hoạch, và món của khách/bếp/tay dựng sẵn phải thuộc kế hoạch (mã 2).
+        Quán chạy riêng (`--mode quan`) để None: dùng cả 6 món."""
         t = tuning["quan"]
         self.t = t
         self.menu = tuning["menu"]
+        self.plan_dishes = None if plan_dishes is None else sorted(plan_dishes)
+        if self.plan_dishes is not None and not set(self.plan_dishes) <= set(self.menu):
+            raise BadInput(f"kế hoạch có món ngoài thực đơn: {sorted(set(self.plan_dishes) - set(self.menu))}")
         self.rng = streams
         self.ids = ids
         p = scenario.get("player", {})
@@ -67,6 +73,7 @@ class QuanSim:
         self.customers = [self._customer_from_scenario(c) for c in scenario.get("customers", [])]
         for e in self.customers:
             ids.reserve(e["id"])
+        self._check_plan_dishes()
         self._check_reserved_within_stock()
         self.money = 0
         self.earned = 0
@@ -201,10 +208,27 @@ class QuanSim:
         occupied = {c["table_id"] for c in self.customers}
         return next((tb for tb in sort_by_id(self.tables) if tb["id"] not in occupied), None)
 
+    def menu_candidates(self) -> list:
+        """Id món khách được gọi, theo mã Unicode: trong day lọc theo kế hoạch TRƯỚC khi lọc nguyên liệu (v1.1 mục 4.5)."""
+        return list(self.plan_dishes) if self.plan_dishes is not None else sorted(self.menu)
+
+    def _check_plan_dishes(self):
+        """Trong day: món của khách, bếp và tay dựng sẵn phải thuộc kế hoạch Ngày (v1.1 mục 4.3, mâu thuẫn -> mã 2)."""
+        if self.plan_dishes is None:
+            return
+        allowed = set(self.plan_dishes)
+        used = [(f"customers.{c['id']}", c["dish_id"]) for c in self.customers]
+        used += [(f"stoves.{s['id']}.dish", s["dish"]["dish_id"]) for s in self.stoves if s.get("dish")]
+        if self.hand:
+            used.append(("hand", self.hand["dish_id"]))
+        for where, dish_id in used:
+            if dish_id not in allowed:
+                raise BadInput(f"{where}: món {dish_id} không thuộc kế hoạch Ngày {self.plan_dishes}")
+
     def _choose_dish(self):
         """Chọn đều theo seed trong các món đủ nguyên liệu khả dụng; duyệt id món theo mã Unicode."""
         avail = self.available_stock()
-        cookable = [d for d in sorted(self.menu) if recipe_fits(self.menu[d]["recipe"], avail)]
+        cookable = [d for d in self.menu_candidates() if recipe_fits(self.menu[d]["recipe"], avail)]
         if not cookable:
             return None
         return cookable[self.rng.get(CUSTOMER_DISH_STREAM).randrange(len(cookable))]
