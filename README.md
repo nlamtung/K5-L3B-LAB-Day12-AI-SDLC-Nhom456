@@ -28,6 +28,8 @@ file kho đếm cũ `{"items":{"ca_loc":1}}` bị từ chối với mã 2. Xem [
   - `WASD` hoặc phím mũi tên: Bơi (`gather`) / Đi lại trong quán (`quan`).
   - `E` (`interact`): Cập bến hoặc hái rau ở mặt nước (`gather`); nấu, bưng món hoặc phục vụ khách (`quan`).
   - `Space` (`catch`): Bắt đàn cá khi đang lặn dưới nước (`gather`).
+  - `H`: Bật/Tắt chế độ tương phản cao (**High Contrast Mode** - hỗ trợ tiếp cận/accessibility).
+  - `P` hoặc `Esc`: Tạm dừng (**Pause**) khi chơi chế độ Ngày (`--mode day`).
   - `R`: Chơi lại từ đầu.
 - **Cách tính điểm (Test Contract v1.2):**
   - Công thức ở mọi snapshot và dòng `end`: `score = earned + 100 × floor(reputation)`.
@@ -43,6 +45,10 @@ file kho đếm cũ `{"items":{"ca_loc":1}}` bị từ chối với mã 2. Xem [
 ## Sáng tạo của nhóm
 
 - **Nâng cấp giao diện Canvas 2D & hiệu ứng hạt (`chonoi/web/index.html`):** Sóng nước động trên mặt sông, bọt khí khi Út Sen lặn, khói bếp bay khi nấu, hiển thị trực quan trạng thái bếp/bàn/kiên nhẫn và bảng kết thúc buổi.
+- **Khả năng tiếp cận (Accessibility) & 3 Cảnh báo trực quan (Phase 4):**
+  - **Chế độ tương phản cao (High Contrast Mode):** Phím tắt `H` hoặc nút bấm trên màn hình chuyển đổi tức thì sang bảng màu tương phản cực đại, giúp người khiếm thị nhận diện rõ các thực thể.
+  - **3 Cảnh báo động chữ & icon:** 🫧 *Oxy cạn kiệt* (< 25%), ⚠️ *Thủy quái đến gần* (Cá Sấu Năm Chèo áp sát trong tầm nguy hiểm), ⏳ *Khách sắp giận* (kiên nhẫn < 25%).
+  - **HUD Cá Sấu Năm Chèo:** Vẽ gai lưng, mõm quái vật và trạng thái rượt đuổi `DÍ!` của `M1`, `M2`.
 - **Âm thanh procedural bằng Web Audio API (zero-dependency):** Hiệu ứng âm thanh lặn/nổi (`dive`/`surface`), món chín (`dish_ready`), thu tiền (`paid`) kèm nút bật/tắt âm thanh trên màn hình.
 - **Đảm bảo không ảnh hưởng lõi & headless:** Toàn bộ đồ họa và âm thanh chỉ nằm ở phía client trình duyệt (`chonoi/web/index.html`), **tắt hoàn toàn ở chế độ headless** và không thay đổi tick, RNG, sự kiện hay snapshot.
   - Bằng chứng lõi vẫn đúng & tất định từng byte: [`docs/proof/phase-1/test-suite.txt`](docs/proof/phase-1/test-suite.txt), [`docs/proof/phase-1/determinism.txt`](docs/proof/phase-1/determinism.txt), [`docs/verification/phase-1.md`](docs/verification/phase-1.md).
