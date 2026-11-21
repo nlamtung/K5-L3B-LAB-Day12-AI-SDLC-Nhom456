@@ -32,15 +32,15 @@
 **Interfaces:**
 - Produces: `drawBlock(ctx, x, y, w, h, depth, topColor, sideColor, frontColor)`, `drawShadow(ctx, x, y, rX, rY, blur)`
 
-- [ ] **Step 1: Viết các hàm tiện ích dựng khối isometric và đổ bóng 2.5D**
-- [ ] **Step 2: Nâng cấp cảnh Lặn Sông Nước (`drawGather`) sang đồ họa giả 3D (Thuyền tam bản khối, tia sáng dưới nước, cá và Út Sen có chiều sâu)**
-- [ ] **Step 3: Nâng cấp cảnh Quán Ăn Chợ Nổi (`drawQuan`) sang đồ họa giả 3D (Sàn ván gỗ beveled, bếp lò đất nung đỏ lửa than, bàn tròn có bóng râm, khách 2.5D)**
-- [ ] **Step 4: Kiểm tra trực quan và chạy kiểm thử không có hồi quy regression**
+- [x] **Step 1: Viết các hàm tiện ích dựng khối isometric và đổ bóng 2.5D**
+- [x] **Step 2: Nâng cấp cảnh Lặn Sông Nước (`drawGather`) sang đồ họa giả 3D (Thuyền tam bản khối, tia sáng dưới nước, cá và Út Sen có chiều sâu)**
+- [x] **Step 3: Nâng cấp cảnh Quán Ăn Chợ Nổi (`drawQuan`) sang đồ họa giả 3D (Sàn ván gỗ beveled, bếp lò đất nung đỏ lửa than, bàn tròn có bóng râm, khách 2.5D)**
+- [x] **Step 4: Kiểm tra trực quan và chạy kiểm thử không có hồi quy regression**
 
 Run: `PYTHONPATH=tests:. python3 -m unittest discover -s tests -v`
 Expected: PASS 93/93 tests.
 
-- [ ] **Step 5: Commit thay đổi lên nhánh `feat/tv4-canvas-audio-ui`**
+- [x] **Step 5: Commit thay đổi lên nhánh `feat/tv4-canvas-audio-ui`**
 
 ```bash
 git add chonoi/web/index.html docs/superpowers/

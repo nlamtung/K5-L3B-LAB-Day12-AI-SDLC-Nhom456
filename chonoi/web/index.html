@@ -70,25 +70,59 @@ function playTone(freq, type, duration, gainVal = 0.1) {
 
 function playSplashSound() { playTone(160, "sine", 0.3, 0.16); }
 function playReadySound() {
-  playTone(587.33, "triangle", 0.3, 0.12);
-  setTimeout(() => playTone(880, "sine", 0.35, 0.15), 100);
-}
-function playCoinSound() {
-  playTone(987.77, "sine", 0.18, 0.14);
-  setTimeout(() => playTone(1318.51, "sine", 0.28, 0.18), 90);
+  if (!soundEnabled) return;
+  initAudio();
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  try {
+    const o1 = audioCtx.createOscillator(), g1 = audioCtx.createGain();
+    o1.type = "triangle"; o1.frequency.setValueAtTime(587.33, now);
+    g1.gain.setValueAtTime(0.12, now); g1.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+    o1.connect(g1); g1.connect(audioCtx.destination);
+    o1.start(now); o1.stop(now + 0.3);
+
+    const o2 = audioCtx.createOscillator(), g2 = audioCtx.createGain();
+    o2.type = "sine"; o2.frequency.setValueAtTime(880, now + 0.1);
+    g2.gain.setValueAtTime(0.15, now + 0.1); g2.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+    o2.connect(g2); g2.connect(audioCtx.destination);
+    o2.start(now + 0.1); o2.stop(now + 0.45);
+  } catch (e) {}
 }
 
-let lastEventCount = 0;
+function playCoinSound() {
+  if (!soundEnabled) return;
+  initAudio();
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  try {
+    const o1 = audioCtx.createOscillator(), g1 = audioCtx.createGain();
+    o1.type = "sine"; o1.frequency.setValueAtTime(987.77, now);
+    g1.gain.setValueAtTime(0.14, now); g1.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+    o1.connect(g1); g1.connect(audioCtx.destination);
+    o1.start(now); o1.stop(now + 0.18);
+
+    const o2 = audioCtx.createOscillator(), g2 = audioCtx.createGain();
+    o2.type = "sine"; o2.frequency.setValueAtTime(1318.51, now + 0.08);
+    g2.gain.setValueAtTime(0.18, now + 0.08); g2.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+    o2.connect(g2); g2.connect(audioCtx.destination);
+    o2.start(now + 0.08); o2.stop(now + 0.35);
+  } catch (e) {}
+}
+
+let lastProcessedTick = -1;
 function processNewEvents(events) {
   if (!events || events.length === 0) return;
-  if (lastEventCount > events.length) lastEventCount = 0;
-  for (let i = lastEventCount; i < events.length; i++) {
+  for (let i = 0; i < events.length; i++) {
     const ev = events[i];
-    if (ev.name === "dish_ready") playReadySound();
-    else if (ev.name === "paid") playCoinSound();
-    else if (ev.name === "dive" || ev.name === "surface") playSplashSound();
+    const t = ev.tick !== undefined ? ev.tick : 0;
+    if (t > lastProcessedTick) {
+      if (ev.name === "dish_ready") playReadySound();
+      else if (ev.name === "paid") playCoinSound();
+      else if (ev.name === "dive" || ev.name === "surface") playSplashSound();
+    }
   }
-  lastEventCount = events.length;
+  const maxTick = Math.max(...events.map(e => e.tick !== undefined ? e.tick : 0));
+  if (maxTick > lastProcessedTick) lastProcessedTick = maxTick;
 }
 
 // ---------- Hệ thống Hạt Hiệu ứng (Particles) ----------
@@ -167,7 +201,7 @@ async function flush() {
   }
   inflight = false;
 }
-function keyName(e) { return e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase(); }
+function keyName(e) { return e.key.toLowerCase(); }
 addEventListener("keydown", (e) => {
   initAudio();
   const k = keyName(e);
@@ -175,7 +209,7 @@ addEventListener("keydown", (e) => {
   if (MOVE_KEYS[k]) { down.add(MOVE_KEYS[k]); e.preventDefault(); }
   else if (k === "e") down.add("interact");
   else if (k === " ") { down.add("catch"); e.preventDefault(); }
-  else if (k === "r") { fetch("/restart", { method: "POST" }); lastSent = ""; down.clear(); }
+  else if (k === "r") { fetch("/restart", { method: "POST" }); lastSent = ""; down.clear(); lastProcessedTick = -1; particles.length = 0; }
   pushInput();
 });
 addEventListener("keyup", (e) => {
