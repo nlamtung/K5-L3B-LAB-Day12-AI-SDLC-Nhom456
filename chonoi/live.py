@@ -108,8 +108,8 @@ class LiveGame:
             phase = snap.get("phase", self.mode)
             snap["meta"] = self.tuning.get(phase, {})
             snap["shop_meta"] = self.tuning.get("shop")
+            snap["menu"] = self.tuning.get("menu")
             snap["freshness"] = self.tuning.get("freshness")  # v1.2: HUD đọc ngưỡng ươn
-            snap["menu"] = self.tuning.get("menu")  # HUD: thời gian nấu, công thức (không hard-code số ở client)
             snap["events"] = list(self.events)
             snap["finished"] = self.session.done
             reason = getattr(self.session, "reason", None)
@@ -137,6 +137,48 @@ class LiveGame:
             raise ValueError("buy phải là chuỗi khác rỗng")
         with self._lock:
             self.inputs.set(move, buy=buy, **buttons)
+
+    def cook_order(self, stove_id: str, order_id: str):
+        """Chỉ dùng cho UI chơi trực tiếp (`chonoi.live`): chọn đích danh đơn reserved để nấu trên bếp idle."""
+        import math
+        from .ids import id_key
+        with self._lock:
+            sim = getattr(self.session, "sim", None)
+            if sim is None or getattr(sim, "phase", None) != "quan" or self.session.done:
+                raise ValueError("chỉ chọn món nấu khi đang ở buổi tối (quan)")
+            s = next((x for x in sim.stoves if x["id"] == stove_id), None)
+            if s is None or s["state"] != "idle":
+                raise ValueError("bếp không rảnh")
+            if math.dist(sim.pos, s["pos"]) > sim.t["interact_radius"]:
+                raise ValueError("đứng quá xa bếp")
+            c = next((x for x in sim.customers if x["id"] == order_id and x["order_status"] == "reserved"), None)
+            if c is None:
+                raise ValueError("đơn không ở trạng thái chờ nấu")
+            dish_id = c["dish_id"]
+            dish = sim.menu[dish_id]
+            held = set(c["reserved"])
+            used = [it for it in sim.stock if it["id"] in held]
+            sim.stock = [it for it in sim.stock if it["id"] not in held]
+            used.sort(key=lambda it: (it["kind"], id_key(it["id"])))
+            items = [sim.fresh.out(it) for it in used]
+            base_price = sim.fresh.locked_price(dish["price"], used)
+            c["order_status"] = "assigned"
+            c["reserved"] = []
+            c["base_price"] = base_price
+            s["state"] = "cooking"
+            s["dish"] = {"order_id": c["id"], "dish_id": dish_id, "base_price": base_price}
+            s["cook_ticks_left"] = int(round(dish["cook_s"] * 60))
+            s["ready_ticks"] = 0
+            ev = {
+                "type": "event", "tick": self.session.tick, "phase": "quan",
+                "name": "cook_started",
+                "data": {"stove_id": s["id"], "order_id": c["id"], "dish_id": dish_id,
+                         "items": items, "base_price": base_price},
+            }
+            if getattr(self.session, "day", 0):
+                ev["day"] = self.session.day
+            self.events.append(ev)
+            del self.events[:-RECENT_EVENTS]
 
     def restart(self):
         with self._lock:
@@ -168,6 +210,20 @@ class _Handler(BaseHTTPRequestHandler):
                     self._send(200, f.read(), "text/html; charset=utf-8")
             except OSError:
                 self._send(404, b'{"error":"thieu index.html"}')
+        elif path.startswith("/assets/"):
+            rel = os.path.normpath(path[len("/assets/"):]).lstrip("\\/")
+            if ".." in rel.split(os.sep):
+                self._send(403, b'{"error":"cam"}')
+                return
+            fpath = os.path.join(WEB_DIR, "assets", rel)
+            ext = os.path.splitext(fpath)[1].lower()
+            ctype = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                     ".webp": "image/webp", ".svg": "image/svg+xml"}.get(ext, "application/octet-stream")
+            try:
+                with open(fpath, "rb") as f:
+                    self._send(200, f.read(), ctype)
+            except OSError:
+                self._send(404, b'{"error":"khong co asset"}')
         else:
             self._send(404, b'{"error":"khong co"}')
 
@@ -187,6 +243,11 @@ class _Handler(BaseHTTPRequestHandler):
                 if not isinstance(body, dict):
                     raise ValueError("body phải là object")
                 self.game.set_input(body)
+            elif path == "/cook":
+                body = json.loads(raw.decode("utf-8") or "{}")
+                if not isinstance(body, dict) or not body.get("stove_id") or not body.get("order_id"):
+                    raise ValueError("cần stove_id và order_id")
+                self.game.cook_order(str(body["stove_id"]), str(body["order_id"]))
             elif path == "/restart":
                 self.game.restart()
             else:
